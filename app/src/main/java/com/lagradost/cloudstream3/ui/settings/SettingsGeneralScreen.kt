@@ -201,19 +201,6 @@ object SettingsGeneralScreen : SearchableSettings {
             Preference.PreferenceGroup(
                 title = stringResource(R.string.pref_category_bypass),
                 preferenceItems = persistentListOf(
-                    Preference.PreferenceItem.TextPreference(
-                        title = stringResource(R.string.add_site_pref),
-                        subtitle = stringResource(R.string.add_site_summary),
-                        icon = painterResource(R.drawable.copy_all_24px),
-                        onClick = {
-                            // TODO refactor into compose
-                            if (SettingsGeneral.getCurrent().isEmpty()) {
-                                SettingsGeneral.showAdd()
-                            } else {
-                                SettingsGeneral.showAddOrDelete()
-                            }
-                        }
-                    ),
                     Preference.PreferenceItem.ListPreference(
                         title = stringResource(R.string.dns_pref),
                         subtitle = stringResource(R.string.dns_pref_summary),
@@ -245,10 +232,10 @@ object SettingsGeneralScreen : SearchableSettings {
                 preferenceItems = persistentListOf(
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(R.string.github),
-                        subtitle = "https://github.com/recloudstream/cloudstream",
+                        subtitle = "https://github.com/imper1aldev/cloudstream-lite",
                         icon = painterResource(R.drawable.ic_github_logo),
                         onClick = {
-                            CloudStreamApp.openBrowser("https://github.com/recloudstream/cloudstream")
+                            CloudStreamApp.openBrowser("https://github.com/imper1aldev/cloudstream-lite")
                         }
                     ),
                     Preference.PreferenceItem.TextPreference(

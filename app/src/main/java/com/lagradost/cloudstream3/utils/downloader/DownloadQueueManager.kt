@@ -234,6 +234,7 @@ object DownloadQueueManager {
         if (isComplete) return@safe
 
         if (add(downloadQueueWrapper)) {
+            com.lagradost.cloudstream3.ui.lite.LiteFavorites.accepted(downloadQueueWrapper)
             setQueueStatus(downloadQueueWrapper.id, VideoDownloadManager.DownloadType.IsPending)
             startQueueService(context)
         }

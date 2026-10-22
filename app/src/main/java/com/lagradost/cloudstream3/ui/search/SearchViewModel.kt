@@ -52,6 +52,9 @@ class SearchViewModel : ViewModel() {
     private var repos = apis.withLock { apis.map { APIRepository(it) } }
 
     fun clearSearch() {
+        currentSearchIndex++
+        onGoingSearch?.cancel()
+        lastQuery = null
         _searchResponse.postValue(Resource.Success(ExpandableSearchList(emptyList(), 0, false)))
         _currentSearch.postValue(emptyMap())
         expandableSearches.clear()
@@ -119,14 +122,29 @@ class SearchViewModel : ViewModel() {
     }
 
     private val lock: MutableSet<String> = mutableSetOf()
+    private val _moreError = MutableLiveData(false)
+    val moreError: LiveData<Boolean> = _moreError
+    private val _moreLoading = MutableLiveData(false)
+    val moreLoading: LiveData<Boolean> = _moreLoading
+
+    fun loadMore() = viewModelScope.launchSafe {
+        expandableSearches.keys.firstOrNull()?.let { expandAndReturn(it) }
+    }
 
     // ExpandableHomepageList because the home adapter is reused in the search fragment
     suspend fun expandAndReturn(name: String): HomeViewModel.ExpandableHomepageList? {
-        if (lock.contains(name)) return null
+        val lockKey = "$currentSearchIndex/$name"
+        if (lock.contains(lockKey)) return null
         val query = lastQuery ?: return null
         val repo = repos.find { it.name == name } ?: return null
+        val generation = currentSearchIndex
+        val current = expandableSearches[name] ?: return null
+        if (!current.hasNext) return null
 
-        lock += name
+        lock += lockKey
+        _moreError.postValue(false)
+        _moreLoading.postValue(true)
+        try {
 
         expandableSearches[name]?.let { current ->
             debugAssert({ !current.hasNext }) {
@@ -134,7 +152,9 @@ class SearchViewModel : ViewModel() {
             }
 
             val nextPage = current.currentPage + 1
-            val next = repo.search(query, nextPage)
+            val next = withContext(Dispatchers.IO) { repo.search(query, nextPage) }
+            if (generation != currentSearchIndex) return null
+            if (com.lagradost.cloudstream3.BuildConfig.DEBUG) android.util.Log.d("LitePagination", "Search page=$nextPage success=${next is Resource.Success}")
             if (next is Resource.Success) {
                 val nextValue = next.value
                 expandableSearches[name]?.apply {
@@ -152,14 +172,17 @@ class SearchViewModel : ViewModel() {
                     "Expanded an item not in search load named $name, current list is ${expandableSearches.keys}"
                 }
             } else {
-                current.hasNext = false
+                _moreError.postValue(true)
             }
 
-            _searchResponse.postValue(Resource.Success(bundleSearch(expandableSearches)))
-            _currentSearch.postValue(expandableSearches)
+            _searchResponse.postValue(Resource.Success(bundleSearch(expandableSearches).copy()))
+            _currentSearch.postValue(expandableSearches.mapValues { it.value.copy() })
         }
 
-        lock -= name
+        } finally {
+            lock -= lockKey
+            if (generation == currentSearchIndex) _moreLoading.postValue(false)
+        }
 
         val item = expandableSearches[name] ?: return null
         return HomeViewModel.ExpandableHomepageList(
@@ -223,6 +246,8 @@ class SearchViewModel : ViewModel() {
             }
 
             _searchResponse.postValue(Resource.Loading())
+            _moreError.postValue(false)
+            _moreLoading.postValue(false)
             _currentSearch.postValue(emptyMap())
             expandableSearches.clear()
 
@@ -248,7 +273,8 @@ class SearchViewModel : ViewModel() {
                 _currentSearch.postValue(expandableSearches)
                 val list = bundleSearch(expandableSearches)
 
-                _searchResponse.postValue(Resource.Success(list))
+                if (expandableSearches.isEmpty()) _searchResponse.postValue(Resource.Failure(false, "Search unavailable"))
+                else _searchResponse.postValue(Resource.Success(list.copy()))
             }
         }
 }

@@ -60,6 +60,7 @@ class RepoAdapter(
                     }
 
                     actionButton.setOnClickListener {
+                        if (isPrebuilt && !isSetup) return@setOnClickListener
                         imageClickCallback(item)
                     }
 
@@ -92,6 +93,7 @@ class RepoAdapter(
                     }
 
                     actionButton.setOnClickListener {
+                        if (isPrebuilt && !isSetup) return@setOnClickListener
                         imageClickCallback(item)
                     }
 

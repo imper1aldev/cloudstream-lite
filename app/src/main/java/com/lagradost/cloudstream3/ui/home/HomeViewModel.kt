@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.ui.home
 
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -222,6 +223,8 @@ class HomeViewModel : ViewModel() {
         var list: HomePageList,
         var currentPage: Int,
         var hasNext: Boolean,
+        var loading: Boolean = false,
+        var error: Boolean = false,
     )
 
     private val expandable: MutableMap<String, ExpandableHomepageList> = mutableMapOf()
@@ -232,10 +235,16 @@ class HomeViewModel : ViewModel() {
     val lock: MutableSet<String> = mutableSetOf()
 
     suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
-        if (lock.contains(name)) return null
-        lock += name
-
-        repo?.apply {
+        val generation = repo
+        val lockKey = "${System.identityHashCode(generation)}/$name"
+        if (lock.contains(lockKey) || expandable[name]?.hasNext != true) return null
+        lock += lockKey
+        val current = expandable[name] ?: return null
+        current.loading = true
+        current.error = false
+        publishPage()
+        try {
+        generation?.apply {
             waitForHomeDelay()
 
             expandable[name]?.let { current ->
@@ -244,7 +253,9 @@ class HomeViewModel : ViewModel() {
                 }
 
                 val nextPage = current.currentPage + 1
-                val next = getMainPage(nextPage, mainPage.indexOfFirst { it.name == name })
+                val next = withContext(Dispatchers.IO) { getMainPage(nextPage, mainPage.indexOfFirst { it.name == name }) }
+                if (repo !== generation) return null
+                if (com.lagradost.cloudstream3.BuildConfig.DEBUG) Log.d("LitePagination", "Home $name page=$nextPage success=${next is Resource.Success}")
                 if (next is Resource.Success) {
                     next.value.filterNotNull().forEach { main ->
                         main.items.forEach { newList ->
@@ -258,22 +269,29 @@ class HomeViewModel : ViewModel() {
                                 }
 
                                 this.list.list += newList.list
-                                this.list.list.distinctBy { it.url } // just to be sure we are not adding the same shit for some reason
+                                this.list.list = this.list.list.distinctBy { it.url } // just to be sure we are not adding the same shit for some reason
                             } ?: debugWarning {
                                 "Expanded an item not in main load named $key, current list is ${expandable.keys}"
                             }
                         }
                     }
                 } else {
-                    current.hasNext = false
+                    current.error = true
                 }
             }
-            _page.postValue(Resource.Success(expandable))
         }
-
-        lock -= name
-
+        } finally {
+            current.loading = false
+            lock -= lockKey
+            if (repo === generation) publishPage()
+        }
         return expandable[name]
+    }
+
+    private fun publishPage() {
+        _page.postValue(Resource.Success(expandable.mapValues { (_, row) ->
+            row.copy(list = row.list.copy(list = row.list.list.toList()))
+        }))
     }
 
     // this is soo over engineered, but idk how I can make it clean without making the main api harder to use :pensive:
@@ -396,7 +414,7 @@ class HomeViewModel : ViewModel() {
                     } else {
                         _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
                     }
-                    _page.postValue(Resource.Success(expandable))
+                    publishPage()
                 } catch (e: Exception) {
                     _randomItems.postValue(emptyList())
                     logError(e)
@@ -436,15 +454,15 @@ class HomeViewModel : ViewModel() {
     }
 
     private fun afterPluginsLoaded(forceReload: Boolean) {
-        loadAndCancel(DataStoreHelper.currentHomePage, forceReload)
+        loadAndCancel(com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_API_NAME, forceReload)
     }
 
     private fun afterMainPluginsLoaded(unused: Boolean = false) {
-        loadAndCancel(DataStoreHelper.currentHomePage, false)
+        loadAndCancel(com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_API_NAME, false)
     }
 
     private fun reloadHome(unused: Boolean = false) {
-        loadAndCancel(DataStoreHelper.currentHomePage, true)
+        loadAndCancel(com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_API_NAME, true)
     }
 
     private fun reloadAccount(unused: Boolean = false) {
@@ -497,6 +515,19 @@ class HomeViewModel : ViewModel() {
         loadResult(load.response.url, load.response.apiName, load.response.name, load.action)
     }
 
+    fun heroCandidate(): SearchResponse? {
+        val currentPage = page.value
+        if (currentPage !is Resource.Success) return null
+        val resumeUrls: Set<String> =
+            resumeWatching.value?.map { it.url }?.toSet() ?: emptySet()
+        return selectHeroCandidate(currentPage.value.values.map { it.list.list }, resumeUrls)
+    }
+
+    suspend fun loadHeroBackdrop(url: String): Resource<LoadResponse>? {
+        Log.i("HomeViewModel", "heroBackdrop load=$url")
+        return repo?.load(url)
+    }
+
     // only save the key if it is from UI, as we don't want internal functions changing the setting
     fun loadAndCancel(
         preferredApiName: String?,
@@ -504,6 +535,7 @@ class HomeViewModel : ViewModel() {
         fromUI: Boolean = false
     ) =
         ioSafe {
+            Log.i("HomeViewModel", "loadAndCancel preferred=$preferredApiName forceReload=$forceReload")
             //println("trying to load $preferredApiName")
             // Since plugins are loaded in stages this function can get called multiple times.
             // The issue with this is that the homepage may be fetched multiple times while the first request is loading
@@ -549,4 +581,18 @@ class HomeViewModel : ViewModel() {
             }
             reloadAccount()
         }
+}
+
+// spec §9.1/AC3: first item not already in Continue Watching, else first item of the first row
+internal fun selectHeroCandidate(
+    rows: List<List<SearchResponse>>,
+    resumeUrls: Set<String>,
+): SearchResponse? {
+    var firstItem: SearchResponse? = null
+    for (items in rows) {
+        if (items.isEmpty()) continue
+        if (firstItem == null) firstItem = items.first()
+        items.firstOrNull { it.url !in resumeUrls }?.let { return it }
+    }
+    return firstItem
 }

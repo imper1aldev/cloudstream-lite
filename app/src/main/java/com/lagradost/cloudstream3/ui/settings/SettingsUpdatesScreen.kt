@@ -197,14 +197,7 @@ object SettingsUpdatesScreen : SearchableSettings {
                                 )
                             }
                         }
-                    ),
-                    Preference.PreferenceItem.TextPreference(
-                        title = stringResource(R.string.test_extensions),
-                        subtitle = stringResource(R.string.test_extensions_summary),
-                        icon = painterResource(R.drawable.baseline_network_ping_24),
-                        onClick = {
-                            activity?.navigate(R.id.navigation_test_providers)
-                        })
+                    )
                 )
             ),
             Preference.PreferenceGroup(

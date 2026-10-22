@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.ProviderTestItemBinding
 import com.lagradost.cloudstream3.mvvm.getAllMessages
 import com.lagradost.cloudstream3.mvvm.getStackTracePretty
+import com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_INTERNAL_NAME
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.ui.BaseDiffCallback
 import com.lagradost.cloudstream3.ui.NoStateAdapter
@@ -110,6 +111,12 @@ class TestResultAdapter() :
                 val pluginFile = File(path)
                 // Cannot delete a deleted plugin
                 if (!pluginFile.exists()) return@let
+
+                // Lite gate: only the installed allowed plugin's file may be deleted here.
+                val isAllowedFile = PluginManager.getPluginsOnline()
+                    .firstOrNull { it.internalName == ALLOWED_PLUGIN_INTERNAL_NAME }
+                    ?.filePath == path
+                if (!isAllowedFile) return@let
 
                 builder.setNegativeButton(R.string.delete_plugin) { _, _ ->
                     ioSafe {

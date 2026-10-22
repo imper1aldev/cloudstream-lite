@@ -26,6 +26,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lagradost.cloudstream3.mvvm.getStackTracePretty
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.ui.settings.ApkUpdater
+import com.lagradost.cloudstream3.ui.lite.NexoNoReleaseException
+import com.lagradost.cloudstream3.ui.lite.NexoNoCompatibleApkException
+import com.lagradost.cloudstream3.ui.lite.NexoReleaseQueryException
 import com.lagradost.cloudstream3.ui.settings.GithubReleases
 import com.lagradost.cloudstream3.ui.settings.GithubReleases.APK_CONTENT_TYPE
 import com.lagradost.cloudstream3.ui.settings.GithubReleases.APK_PRERELEASE
@@ -108,7 +111,12 @@ object MainActivityScreen : Screen {
 
                 cancelable = true
                 title = stringResource(R.string.download_failed)
-                body = { Text(text = state.error.getStackTracePretty()) }
+                body = { Text(text = when(state.error) {
+                    is NexoNoReleaseException -> stringResource(R.string.nexo_no_release)
+                    is NexoNoCompatibleApkException -> stringResource(R.string.nexo_no_compatible_apk)
+                    is NexoReleaseQueryException -> stringResource(R.string.nexo_update_query_failed)
+                    else -> state.error.getStackTracePretty()
+                }) }
                 confirmButton = {
                     WhiteButton(text = stringResource(R.string.check_for_update), onClick = {
                         onAction(SearchForUpdate)

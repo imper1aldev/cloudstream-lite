@@ -10,6 +10,7 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.databinding.FragmentSetupMediaBinding
 import com.lagradost.cloudstream3.mvvm.safe
+import com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_API_NAME
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
@@ -55,7 +56,9 @@ class SetupFragmentMedia : BaseFragment<FragmentSetupMediaBinding>(
                         settingsManager.edit { putStringSet(prefKey, values) }
 
                         // Regenerate set homepage
-                        DataStoreHelper.currentHomePage = null
+                        if (DataStoreHelper.currentHomePage != ALLOWED_PLUGIN_API_NAME) {
+                            DataStoreHelper.currentHomePage = null
+                        }
                     }
 
                     if (stored == null) saveSelection()

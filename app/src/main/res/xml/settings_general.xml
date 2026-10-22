@@ -58,12 +58,6 @@
     <PreferenceCategory android:title="@string/pref_category_bypass">
 
         <Preference
-            android:icon="@drawable/ic_baseline_add_24"
-            android:key="@string/override_site_key"
-            android:summary="@string/add_site_summary"
-            android:title="@string/add_site_pref" />
-
-        <Preference
             android:icon="@drawable/ic_baseline_dns_24"
             android:key="@string/dns_key"
             android:summary="@string/dns_pref_summary"

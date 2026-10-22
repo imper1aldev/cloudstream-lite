@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-ONLY manifest. Registered in the `debug` source set, so it merges into
+  every debug build (including prereleaseDebug) but NEVER into release.
+  It exposes the Lite component demo host to `adb shell am start` for
+  screenshots. Not referenced by navigation.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <activity
+            android:name=".ui.lite.LiteDemoActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode"
+            android:exported="true"
+            android:label="Lite Demo (dev only)"
+            android:theme="@style/AppTheme" />
+
+        <activity android:name=".ui.lite.LitePlaybackProbeActivity"
+            android:exported="false" android:theme="@style/AppTheme" />
+        <activity android:name=".ui.lite.LitePlayerProbeActivity" android:exported="false" android:theme="@style/AppTheme" />
+    </application>
+
+</manifest>

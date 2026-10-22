@@ -686,11 +686,15 @@ object DataStoreHelper {
         if (id == null) return
         AccountManager.localListApi.requireLibraryRefresh = true
         removeKey("$currentAccount/$RESULT_FAVORITES_STATE_DATA", id.toString())
+        com.lagradost.cloudstream3.CloudStreamApp.context?.let {
+            com.lagradost.cloudstream3.ui.lite.LiteFavorites.removed(it, id)
+        }
     }
 
     fun setFavoritesData(id: Int?, data: FavoritesData) {
         if (id == null) return
         setKey("$currentAccount/$RESULT_FAVORITES_STATE_DATA", id.toString(), data)
+        com.lagradost.cloudstream3.ui.lite.LiteFavorites.added(id)
         AccountManager.localListApi.requireLibraryRefresh = true
     }
 

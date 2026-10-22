@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.plugins.PluginManager.getPluginsOnline
 import com.lagradost.cloudstream3.plugins.RepositoryManager
 import com.lagradost.cloudstream3.plugins.RepositoryManager.PREBUILT_REPOSITORIES
+import com.lagradost.cloudstream3.plugins.isAllowedPlugin
 import com.lagradost.cloudstream3.utils.UiText
 import com.lagradost.cloudstream3.utils.txt
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
@@ -56,7 +57,9 @@ class ExtensionsViewModel : ViewModel() {
 
         val onlinePlugins = urls.toList().amap {
             RepositoryManager.getRepoPlugins(it)?.toList() ?: emptyList()
-        }.flatten().distinctBy { it.plugin.url }
+        }.flatten()
+            .filter { isAllowedPlugin(it.plugin.internalName, it.repositoryData.url) }
+            .distinctBy { it.plugin.url }
 
         // Iterates over all offline plugins, compares to remote repo and returns the plugins which are outdated
         val outdatedPlugins = getPluginsOnline().flatMap { savedData ->

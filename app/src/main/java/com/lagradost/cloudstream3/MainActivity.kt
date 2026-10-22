@@ -122,7 +122,6 @@ import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLandscape
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.ui.settings.Globals.updateTv
-import com.lagradost.cloudstream3.ui.settings.SettingsGeneral
 import com.lagradost.cloudstream3.ui.setup.HAS_DONE_SETUP_KEY
 import com.lagradost.cloudstream3.ui.setup.SetupFragmentExtensions
 import com.lagradost.cloudstream3.utils.ApkInstaller
@@ -173,7 +172,6 @@ import com.lagradost.cloudstream3.utils.UIHelper.requestRW
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
 import com.lagradost.cloudstream3.utils.UIHelper.showProgress
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
-import com.lagradost.cloudstream3.utils.USER_PROVIDER_API
 import com.lagradost.cloudstream3.utils.USER_SELECTED_HOMEPAGE_API
 import com.lagradost.cloudstream3.utils.downloader.DownloadQueueManager
 import com.lagradost.cloudstream3.utils.setText
@@ -193,7 +191,6 @@ import java.net.URLDecoder
 import java.nio.charset.Charset
 import kotlin.math.abs
 import kotlin.math.absoluteValue
-import kotlin.reflect.full.createInstance
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCallback {
@@ -294,9 +291,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
                 if (str != null && this != null) {
                     if (str.startsWith("https://cs.repo")) {
-                        val realUrl = "https://" + str.substringAfter("?")
-                        println("Repository url: $realUrl")
-                        loadRepository(realUrl)
+                        Log.i(TAG, "Repository deep link disabled in Lite: $str")
+                        showToast(activity, "Repos disabled in Lite")
                         return true
                     } else if (str.contains(APP_STRING)) {
                         for (api in AccountManager.allApis) {
@@ -337,8 +333,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                             }
                         }
                     } else if (safeURI(str)?.scheme == APP_STRING_REPO) {
-                        val url = str.replaceFirst(APP_STRING_REPO, "https")
-                        loadRepository(url)
+                        Log.i(TAG, "Repository deep link disabled in Lite: $str")
+                        showToast(activity, "Repos disabled in Lite")
                         return true
                     } else if (safeURI(str)?.scheme == APP_STRING_SEARCH) {
                         val query = str.substringAfter("$APP_STRING_SEARCH://")
@@ -349,12 +345,17 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                                 logError(t)
                                 query
                             }
-                        // Use both navigation views to support both layouts.
-                        // It might be better to use the QuickSearch.
-                        activity?.findViewById<BottomNavigationView>(R.id.nav_view)?.selectedItemId =
-                            R.id.navigation_search
-                        activity?.findViewById<NavigationRailView>(R.id.nav_rail_view)?.selectedItemId =
-                            R.id.navigation_search
+                        if (isLayout(PHONE)) {
+                            val searchQuery = nextSearchQuery
+                            nextSearchQuery = null
+                            activity.navigate(R.id.navigation_search, Bundle().apply {
+                                putString("search_query", searchQuery)
+                            })
+                        } else {
+                            activity?.findViewById<BottomNavigationView>(R.id.nav_view)?.selectedItemId = R.id.navigation_search
+                            activity?.findViewById<NavigationRailView>(R.id.nav_rail_view)?.selectedItemId = R.id.navigation_search
+                        }
+                        return true
                     } else if (safeURI(str)?.scheme == APP_STRING_PLAYER) {
                         val uri = str.toUri()
                         val name = uri.getQueryParameter("name")
@@ -399,7 +400,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                         }
                     } else if (!isWebview) {
                         if (str.startsWith(DOWNLOAD_NAVIGATE_TO)) {
-                            this.navigate(R.id.navigation_downloads)
+                            this.navigate(R.id.navigation_library, androidx.core.os.bundleOf("parentId" to str.substringAfterLast('/').toIntOrNull()))
                             return true
                         } else {
                             val apiName = extraArgs?.getString(API_NAME_EXTRA_KEY)
@@ -579,8 +580,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     R.id.navigation_download_child,
                     R.id.navigation_download_queue
                 ) -> {
-                    navRailView.menu.findItem(R.id.navigation_downloads).isChecked = true
-                    navView.menu.findItem(R.id.navigation_downloads).isChecked = true
+                    navRailView.menu.findItem(R.id.navigation_library)?.isChecked = true
+                    navView.menu.findItem(R.id.navigation_library)?.isChecked = true
                 }
 
                 in listOf(
@@ -759,6 +760,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         // Check if we are already at the selected destination
         if (navController.currentDestination?.id == destinationId) return false
 
+        // Search opened from the header is temporary, never saved as a tab's content.
+        if (isLayout(PHONE) && navController.currentDestination?.id == R.id.navigation_search) {
+            navController.popBackStack()
+            if (navController.currentDestination?.id == destinationId) return true
+        }
+
         // Make all nav buttons focus on this specific view when nextFocusRightId
         val targetView = when (destinationId) {
             // Please note that if R.id.navigation_home is readded, then it will only take affect when
@@ -814,24 +821,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         ioSafe {
             pluginsLock.withLock {
                 allProviders.withLock {
-                    // Load cloned sites after plugins have been loaded since clones depend on plugins.
+                    Log.i("PLG", "Clones disabled in Lite")
                     try {
-                        getKey<Array<SettingsGeneral.CustomSite>>(USER_PROVIDER_API)?.let { list ->
-                            list.forEach { custom ->
-                                allProviders.firstOrNull {
-                                    it::class.simpleName == custom.parentClassName
-                                }?.let {
-                                    allProviders.add(
-                                        it::class.createInstance().apply {
-                                            name = custom.name
-                                            lang = custom.lang
-                                            mainUrl = custom.url.trimEnd('/')
-                                            canBeOverridden = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
                         // it.hashCode() is not enough to make sure they are distinct
                         apis = allProviders.distinctBy {
                             it.lang + it.name + it.mainUrl + it::class.qualifiedName
@@ -1359,11 +1350,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             }
         } else if (lastError == null) {
             ioSafe {
-                DataStoreHelper.currentHomePage?.let { homeApi ->
-                    mainPluginsLoadedEvent.invoke(loadSinglePlugin(this@MainActivity, homeApi))
-                } ?: run {
-                    mainPluginsLoadedEvent.invoke(false)
-                }
+                mainPluginsLoadedEvent.invoke(com.lagradost.cloudstream3.plugins.ensureAllowedProvider(this@MainActivity))
 
                 ioSafe {
                     if (settingsManager.getBoolean(
@@ -1648,11 +1635,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 libraryViewModel?.currentApiName?.observe(this@MainActivity) {
                     val syncAPI = libraryViewModel?.currentSyncApi
                     Log.i("SYNC_API", "${syncAPI?.name}, ${syncAPI?.idPrefix}")
-                    val icon = if (syncAPI?.idPrefix == localListApi.idPrefix) {
-                        R.drawable.library_icon_selector
-                    } else {
-                        syncAPI?.icon ?: R.drawable.library_icon_selector
-                    }
+                    val icon = R.drawable.ic_baseline_favorite_24
 
                     binding?.apply {
                         navRailView.menu.findItem(R.id.navigation_library)?.setIcon(icon)
@@ -1684,6 +1667,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             if (navDestination.matchDestination(R.id.navigation_search) && !nextSearchQuery.isNullOrBlank()) {
                 bundle?.apply {
                     this.putString(SearchFragment.SEARCH_QUERY, nextSearchQuery)
+                    nextSearchQuery = null
                 }
             }
 
@@ -1711,6 +1695,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             itemRippleColor = rippleColor
             itemActiveIndicatorColor = rippleColor
             setupWithNavController(navController)
+            // Header search is not a tab, so the originating tab stays selected.
+            if (isLayout(PHONE)) setOnItemReselectedListener { item ->
+                if (navController.currentDestination?.id == R.id.navigation_search) {
+                    onNavDestinationSelected(item, navController)
+                }
+            }
             setOnItemSelectedListener { item ->
                 onNavDestinationSelected(
                     item,
@@ -1733,6 +1723,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 itemActiveIndicatorColor = rippleColor
             }
             setupWithNavController(navController)
+            // Header search is not a tab, so the originating tab stays selected.
+            if (isLayout(PHONE)) setOnItemReselectedListener { item ->
+                if (navController.currentDestination?.id == R.id.navigation_search) {
+                    onNavDestinationSelected(item, navController)
+                }
+            }
             /*if (isLayout(TV or EMULATOR)) {
                 background?.alpha = 200
             } else {
@@ -2027,22 +2023,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             removeKey(USER_SELECTED_HOMEPAGE_API)
         }
 
-        try {
-            if (getKey<Boolean>(HAS_DONE_SETUP_KEY, false) != true) {
-                navController.navigate(R.id.navigation_setup_language)
-                // If no plugins bring up extensions screen
-            } else if (PluginManager.getPluginsOnline().isEmpty()
-                && PluginManager.getPluginsLocal().isEmpty()
-//                && PREBUILT_REPOSITORIES.isNotEmpty()
-            ) {
-                navController.navigate(
-                    R.id.navigation_setup_extensions,
-                    SetupFragmentExtensions.newInstance(false)
-                )
-            }
-        } catch (e: Exception) {
-            logError(e)
-        }
+        setKey(HAS_DONE_SETUP_KEY, true)
 
 //        Used to check current focus for TV
 //        main {
@@ -2061,6 +2042,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
         // Start the download queue
         DownloadQueueManager.init(this)
+        com.lagradost.cloudstream3.ui.lite.LiteFavorites.initialize(this)
     }
 
     /** Biometric stuff **/

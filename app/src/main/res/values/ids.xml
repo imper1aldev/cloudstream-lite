@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Stable container id for the legacy HomeFragment hosted by HomeFragment2 on TV/emulator (T3.1). -->
+    <item name="home_lite_legacy_host" type="id" />
+    <!-- Stable container id for the legacy ResultTrailerPlayer hosted by ResultFragment2 on TV/emulator (T4.1). -->
+    <item name="result_lite_legacy_host" type="id" />
+</resources>

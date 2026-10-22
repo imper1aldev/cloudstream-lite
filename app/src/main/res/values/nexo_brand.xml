@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">NexoStream</string>
+    <string name="play_with_app_name">Play with NexoStream</string>
+    <color name="nexo_launcher_background">#0B0D14</color>
+</resources>

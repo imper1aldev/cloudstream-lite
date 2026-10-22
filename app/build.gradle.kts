@@ -1,3 +1,4 @@
+import java.util.Properties
 import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
 import org.jetbrains.dokka.gradle.engine.parameters.KotlinPlatform
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
@@ -11,6 +12,21 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+}
+
+val nexo = Properties().apply {
+    providers.fileContents(rootProject.layout.projectDirectory.file("gradle/nexostream.properties"))
+        .asText.get().reader().use { load(it) }
+}
+val nexoVersionCode = providers.environmentVariable("NEXO_VERSION_CODE")
+    .orElse(nexo.getProperty("nexo.versionCode")).get().toIntOrNull()
+require(nexoVersionCode != null && nexoVersionCode in 1..2_100_000_000) {
+    "NEXO_VERSION_CODE must be a positive Android version code"
+}
+val nexoVersionName = providers.environmentVariable("NEXO_VERSION_NAME")
+    .orElse(nexo.getProperty("nexo.versionName")).get()
+require(nexoVersionName.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+(?:[-.][A-Za-z0-9]+)*"))) {
+    "NEXO_VERSION_NAME must be an explicit semantic version"
 }
 
 val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
@@ -84,30 +100,36 @@ android {
         }
     }
 
+    // Production builds require the fork's own key; debug keeps Android's development key.
+    val signingStorePath = providers.environmentVariable("SIGNING_STORE_FILE").orNull
+    val releaseRequested = gradle.startParameter.taskNames.any { it.contains("Release") && !it.contains("Debug") }
+    if (releaseRequested) {
+        val missing = listOf("SIGNING_STORE_FILE", "SIGNING_KEY_ALIAS", "SIGNING_KEY_PASSWORD", "SIGNING_STORE_PASSWORD")
+            .filter { providers.environmentVariable(it).orNull.isNullOrBlank() }
+        require(missing.isEmpty()) { "Missing NexoStream release signing inputs: ${missing.joinToString()}; no debug signing fallback" }
+        require(file(checkNotNull(signingStorePath)).isFile) { "NexoStream release keystore does not exist" }
+    }
     signingConfigs {
-        // We just use SIGNING_KEY_ALIAS here since it won't change
-        // so won't kill the configuration cache.
-        if (System.getenv("SIGNING_KEY_ALIAS") != null) {
-            create("prerelease") {
-                val tmpFilePath = System.getProperty("user.home") + "/work/_temp/keystore/"
-                val prereleaseStoreFile: File? = File(tmpFilePath).listFiles()?.first()
-
-                storeFile = prereleaseStoreFile?.let { file(it) }
-                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
-            }
+        create("nexoRelease") {
+            storeFile = signingStorePath?.let { file(it) }
+            storePassword = providers.environmentVariable("SIGNING_STORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("SIGNING_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("SIGNING_KEY_PASSWORD").orNull
         }
     }
 
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.lagradost.cloudstream3"
+        applicationId = nexo.getProperty("nexo.applicationId")
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = libs.versions.versionCode.get().toInt()
-        versionName = libs.versions.versionName.get()
+        versionCode = nexoVersionCode
+        versionName = nexoVersionName
+        listOf("NEXO_APPLICATION_ID" to "nexo.applicationId", "NEXO_UPDATE_OWNER" to "nexo.updateOwner",
+            "NEXO_UPDATE_REPO" to "nexo.updateRepo", "NEXO_PRERELEASE_TAG" to "nexo.prereleaseTag").forEach { (field, key) ->
+            buildConfigField("String", field, "\"${nexo.getProperty(key)}\"")
+        }
 
         manifestPlaceholders["target_sdk_version"] = libs.versions.targetSdk.get()
 
@@ -144,6 +166,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("nexoRelease")
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
@@ -170,13 +193,7 @@ android {
         create("prerelease") {
             dimension = "state"
             applicationIdSuffix = ".prerelease"
-            if (signingConfigs.names.contains("prerelease")) {
-                signingConfig = signingConfigs.getByName("prerelease")
-            } else {
-                logger.warn("No prerelease signing config!")
-            }
             versionNameSuffix = "-PRE"
-            versionCode = (System.currentTimeMillis() / 60000).toInt()
         }
     }
 

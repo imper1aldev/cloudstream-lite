@@ -22,6 +22,42 @@
         android:text="@string/setup_extensions_subtext" />
 
     <LinearLayout
+        android:id="@+id/ensure_state_holder"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ProgressBar
+            android:id="@+id/ensure_progress"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:indeterminateTint="?attr/colorPrimary" />
+
+        <TextView
+            android:id="@+id/ensure_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="16sp"
+            tools:text="@string/setup_extensions_loading" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ensure_retry_btt"
+            style="@style/WhiteButton"
+            android:layout_width="wrap_content"
+            android:nextFocusDown="@id/repo_recycler_view"
+            android:text="@string/retry"
+            tools:visibility="visible" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/blank_repo_screen"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

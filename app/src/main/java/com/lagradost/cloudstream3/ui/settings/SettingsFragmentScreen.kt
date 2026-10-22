@@ -51,6 +51,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
+import com.lagradost.cloudstream3.ui.lite.LiteHeader
+import com.lagradost.cloudstream3.ui.lite.openLiteSearch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -161,7 +164,7 @@ object SettingsFragmentScreen : Screen {
             navigation = R.id.action_navigation_global_to_navigation_settings_extensions,
             screen = null,
             icon = R.drawable.extension_24px,
-            subtitle = persistentListOf(R.string.add_repository)
+            subtitle = persistentListOf()
         ),
     )
 
@@ -199,7 +202,8 @@ object SettingsFragmentScreen : Screen {
 
         Scaffold { _ ->
             Column(modifier = Modifier.verticalScroll(outerListState)) {
-                Spacer(modifier = Modifier.height(MaterialTheme.padding.small))
+                val view = LocalView.current
+                LiteHeader(stringResource(R.string.title_settings), { openLiteSearch(view) })
 
                 val default = DataStoreHelper.getDefaultAccount(
                     LocalContext.current
@@ -239,10 +243,6 @@ object SettingsFragmentScreen : Screen {
                         Text(
                             text = account.name,
                             style = MaterialTheme.typography.titleLarge,
-                        )
-                        Text(
-                            text = stringResource(R.string.title_settings),
-                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }

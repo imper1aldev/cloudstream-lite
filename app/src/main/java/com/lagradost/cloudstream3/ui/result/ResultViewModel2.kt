@@ -1975,6 +1975,8 @@ class ResultViewModel2 : ViewModel() {
         _favoriteStatus.postValue(isFavorite)
     }
 
+    fun refreshFavorite() { currentResponse?.let { postFavorites(it) } }
+
     private fun shouldEnableSort(type: EpisodeSortType, episodes: List<ResultEpisode>?): Boolean {
         if (episodes.isNullOrEmpty()) return false
         return when (type) {

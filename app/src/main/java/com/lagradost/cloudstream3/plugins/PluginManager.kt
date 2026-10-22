@@ -47,6 +47,7 @@ import com.lagradost.cloudstream3.plugins.RepositoryManager.PREBUILT_REPOSITORIE
 import com.lagradost.cloudstream3.plugins.RepositoryManager.downloadPluginToFile
 import com.lagradost.cloudstream3.plugins.RepositoryManager.getRepoPlugins
 import com.lagradost.cloudstream3.plugins.RepositoryManager.sha256
+import com.lagradost.cloudstream3.plugins.isAllowedPlugin
 import com.lagradost.cloudstream3.ui.settings.extensions.REPOSITORIES_KEY
 import com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData
 import com.lagradost.cloudstream3.utils.AppContextUtils.getApiProviderLangSettings
@@ -65,6 +66,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.InputStreamReader
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 // Different keys for local and not since local can be removed at any time without app knowing, hence the local are getting rebuilt on every app start
 const val PLUGINS_KEY = "PLUGINS_KEY"
@@ -283,7 +287,7 @@ object PluginManager {
 
         val onlinePlugins = urls.toList().amap {
             getRepoPlugins(it) ?: emptyList()
-        }.flatten().distinctBy { it.plugin.url }
+        }.flatten().filter { isAllowedPlugin(it.plugin.internalName, it.repositoryData.url) }.distinctBy { it.plugin.url }
 
         // Iterates over all offline plugins, compares to remote repo and returns the plugins which are outdated
         val outdatedPlugins = getPluginsOnline().map { savedData ->
@@ -360,7 +364,7 @@ object PluginManager {
             ?: emptyArray()) + PREBUILT_REPOSITORIES
         val onlinePlugins = urls.toList().amap {
             getRepoPlugins(it)?.toList() ?: emptyList()
-        }.flatten().distinctBy { it.plugin.url }
+        }.flatten().filter { isAllowedPlugin(it.plugin.internalName, it.repositoryData.url) }.distinctBy { it.plugin.url }
 
         val providerLang = activity.getApiProviderLangSettings()
         //Log.i(TAG, "providerLang => ${providerLang.toJson()}")
@@ -485,12 +489,7 @@ object PluginManager {
     suspend fun ___DO_NOT_CALL_FROM_A_PLUGIN_hotReloadAllLocalPlugins(activity: FragmentActivity?) {
         assertNonRecursiveCallstack()
 
-        Log.d(TAG, "Reloading all local plugins!")
-        if (activity == null) return
-        getPluginsLocal().forEach {
-            unloadPlugin(it.filePath)
-        }
-        ___DO_NOT_CALL_FROM_A_PLUGIN_loadAllLocalPlugins(activity, true)
+        Log.d(TAG, "Local plugin hot reload disabled in Lite")
     }
 
     /**
@@ -505,6 +504,10 @@ object PluginManager {
     @Throws
     suspend fun ___DO_NOT_CALL_FROM_A_PLUGIN_loadAllLocalPlugins(context: Context, forceReload: Boolean) {
         assertNonRecursiveCallstack()
+
+        Log.d(TAG, "Local plugin loading disabled in Lite")
+        loadedLocalPlugins = true
+        return
 
         val dir = File(LOCAL_PLUGINS_PATH)
 
@@ -591,6 +594,20 @@ object PluginManager {
      * @return True if successful, false if not
      * */
     private suspend fun loadPlugin(context: Context, file: File, data: PluginData): Boolean {
+        val expectedPath = getPluginPath(
+            context,
+            ALLOWED_PLUGIN_INTERNAL_NAME,
+            ALLOWED_REPOSITORY_URL
+        ).absolutePath
+        if (!data.isOnline ||
+            data.internalName != ALLOWED_PLUGIN_INTERNAL_NAME ||
+            File(data.filePath).absolutePath != expectedPath ||
+            file.absolutePath != expectedPath
+        ) {
+            Log.w(TAG, "Rejected plugin load: $data")
+            return false
+        }
+
         val fileName = file.nameWithoutExtension
         val filePath = file.absolutePath
         currentlyLoading = fileName
@@ -774,8 +791,55 @@ object PluginManager {
         file: File,
         loadPlugin: Boolean,
     ): Boolean {
+        val backupFile = File("${file.absolutePath}.bak")
+        val previousData = getPluginsOnline().firstOrNull { it.filePath == file.absolutePath }
+        val failedData = PluginData(
+            internalName,
+            pluginUrl,
+            true,
+            file.absolutePath,
+            PLUGIN_VERSION_NOT_SET
+        )
+        var backupCreated = false
+        var loadAttempted = false
+        var unloaded = false
+
+        suspend fun rollback() {
+            if (backupCreated) {
+                file.delete()
+                try {
+                    Files.move(
+                        backupFile.toPath(),
+                        file.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(
+                        backupFile.toPath(),
+                        file.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING
+                    )
+                }
+            }
+
+            if (previousData != null) {
+                setPluginData(previousData)
+                if (unloaded) loadPlugin(activity, file, previousData)
+            } else if (loadAttempted) {
+                deletePluginData(failedData)
+            }
+        }
+
         try {
             Log.d(TAG, "Downloading plugin: $pluginUrl to ${file.absolutePath}")
+            // Keep the last working copy until the replacement has loaded; cleanup below prevents .bak orphans.
+            if (backupFile.exists()) backupFile.delete()
+            if (file.exists()) {
+                file.copyTo(backupFile, overwrite = true)
+                backupCreated = true
+            }
+
             // The plugin file needs to be salted with the repository url hash as to allow multiple repositories with the same internal plugin names
             val newFile = downloadPluginToFile(activity, pluginUrl, file, pluginHash) ?: return false
 
@@ -789,18 +853,25 @@ object PluginManager {
 
             return if (loadPlugin) {
                 unloadPlugin(file.absolutePath)
-                loadPlugin(
+                unloaded = true
+                loadAttempted = true
+                val loaded = loadPlugin(
                     activity,
                     newFile,
                     data
                 )
+                if (!loaded) rollback()
+                loaded
             } else {
                 setPluginData(data)
                 true
             }
         } catch (e: Exception) {
+            runCatching { rollback() }
             logError(e)
             return false
+        } finally {
+            if (backupFile.exists()) backupFile.delete()
         }
     }
 
@@ -828,74 +899,8 @@ object PluginManager {
     @InternalAPI
     @Throws
     suspend fun ___DO_NOT_CALL_FROM_A_PLUGIN_manuallyReloadAndUpdatePlugins(activity: Activity) {
-        assertNonRecursiveCallstack()
-
-        showToast(activity.getString(R.string.starting_plugin_update_manually), Toast.LENGTH_LONG)
-
-        ___DO_NOT_CALL_FROM_A_PLUGIN_loadAllOnlinePlugins(activity)
-        afterPluginsLoadedEvent.invoke(false)
-
-        val urls = (getKey<Array<RepositoryData>>(REPOSITORIES_KEY)
-            ?: emptyArray()) + PREBUILT_REPOSITORIES
-        val onlinePlugins = urls.toList().amap {
-            getRepoPlugins(it) ?: emptyList()
-        }.flatten().distinctBy { it.plugin.url }
-
-        val allPlugins = getPluginsOnline().flatMap { savedData ->
-            onlinePlugins
-                .filter { it.plugin.internalName == savedData.internalName }
-                .mapNotNull { onlineData ->
-                    OnlinePluginData(savedData, onlineData).takeIf { it.validOnlineData(activity) }
-                }
-        }.distinctBy { it.onlineData.plugin.url }
-
-        val updatedPlugins = mutableListOf<String>()
-
-        allPlugins.amap { pluginData ->
-            if (pluginData.isDisabled) {
-                Log.e(
-                    "PluginManager",
-                    "Unloading disabled plugin: ${pluginData.onlineData.plugin.name}"
-                )
-                unloadPlugin(pluginData.savedData.filePath)
-            } else {
-                val existingFile = File(pluginData.savedData.filePath)
-                if (existingFile.exists()) existingFile.delete()
-
-                if (downloadPlugin(
-                        activity,
-                        pluginData.onlineData.plugin.url,
-                        pluginData.onlineData.plugin.fileHash,
-                        pluginData.savedData.internalName,
-                        existingFile,
-                        true
-                    )
-                ) {
-                    updatedPlugins.add(pluginData.onlineData.plugin.name)
-                }
-            }
-        }.also {
-            main {
-                val message = if (updatedPlugins.isNotEmpty()) {
-                    activity.getString(R.string.plugins_updated_manually, updatedPlugins.size)
-                } else {
-                    activity.getString(R.string.no_plugins_updated_manually)
-                }
-                showToast(message, Toast.LENGTH_LONG)
-
-                val notificationText = UiText.StringResource(
-                    R.string.plugins_updated_manually,
-                    listOf(updatedPlugins.size)
-                )
-                createNotification(activity, notificationText, updatedPlugins)
-
-            }
-        }
-
-        loadedOnlinePlugins = true
-        afterPluginsLoadedEvent.invoke(false)
-
-        Log.i("PluginManager", "Plugin update done!")
+        // Lite keeps automatic updates only; both legacy and Compose callers land here safely.
+        Log.i(TAG, "Manual plugin update ignored in Lite")
     }
 
     private fun Context.createNotificationChannel() {
