@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.ui
 
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -12,7 +13,6 @@ import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.databinding.FragmentWebviewBinding
 import com.lagradost.cloudstream3.network.WebViewResolver
-import com.lagradost.cloudstream3.utils.AppContextUtils.loadRepository
 
 class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
     BaseFragment.BindingCreator.Inflate(FragmentWebviewBinding::inflate)
@@ -64,7 +64,7 @@ class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
     private class RepoApi(val activity: FragmentActivity?) {
         @JavascriptInterface
         fun installRepo(repoUrl: String) {
-            activity?.loadRepository(repoUrl)
+            Log.i("WebviewFragment", "installRepo disabled in Lite: $repoUrl")
         }
     }
 }

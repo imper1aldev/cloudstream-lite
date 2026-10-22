@@ -95,11 +95,39 @@ data class PluginWrapper(
 }
 
 
+/** Name shown in the UI for the seeded canonical repository. */
+const val SEED_REPOSITORY_NAME = "Spanish providers repository"
+
+/** Icon shown in the UI for the seeded canonical repository. */
+const val SEED_REPOSITORY_ICON_URL = "https://avatars.githubusercontent.com/u/23511335?v=4"
+
 object RepositoryManager {
     const val ONLINE_PLUGINS_FOLDER = "Extensions"
-    val PREBUILT_REPOSITORIES: Array<RepositoryData> by lazy {
-        getKey<Array<RepositoryData>>("PREBUILT_REPOSITORIES") ?: emptyArray()
+
+    /**
+     * Pure seam: returns the repositories that must be appended to [existing] so the
+     * canonical repository is always present exactly once. Empty when already seeded.
+     */
+    fun seedRepositories(existing: List<RepositoryData>): List<RepositoryData> {
+        return if (existing.any { it.url == ALLOWED_REPOSITORY_URL }) emptyList()
+        else listOf(
+            RepositoryData(
+                SEED_REPOSITORY_ICON_URL,
+                SEED_REPOSITORY_NAME,
+                ALLOWED_REPOSITORY_URL
+            )
+        )
     }
+
+    /**
+     * Repositories appended by every consumer on top of the user's saved ones.
+     * Seeded on first run so a clean install is born with the canonical repository;
+     * empty once the user's key already contains it (no duplicates anywhere).
+     */
+    val PREBUILT_REPOSITORIES: Array<RepositoryData>
+        get() = seedRepositories(
+            (getKey<Array<RepositoryData>>(REPOSITORIES_KEY) ?: emptyArray()).toList()
+        ).toTypedArray()
     private val GH_REGEX =
         Regex("^https://raw.githubusercontent.com/([A-Za-z0-9-]+)/([A-Za-z0-9_.-]+)/(.*)$")
 

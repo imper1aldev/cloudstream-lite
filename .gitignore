@@ -12,6 +12,17 @@
 .cxx
 .kotlin/*
 
+# Local AI-agent state, scratch files and orchestration metadata
+/.omo/
+/.omx/
+/.sisyphus/
+/.nexo-work/
+
+# Local investigation reports, measurements and implementation plans
+# Keep source benchmarks, regression tests and developer docs versionable.
+/docs/benchmarks/
+/docs/superpowers/
+
 # Created by https://www.toptal.com/developers/gitignore/api/kotlin,java,android,androidstudio,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=kotlin,java,android,androidstudio,visualstudiocode
 

@@ -6,6 +6,7 @@ import android.app.Dialog
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Typeface
@@ -33,6 +34,9 @@ import androidx.core.content.edit
 import androidx.core.text.toSpanned
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.lifecycle.Observer
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Format.NO_VALUE
@@ -84,6 +88,15 @@ import com.lagradost.cloudstream3.ui.player.source_priority.ProfileSettings
 import com.lagradost.cloudstream3.ui.player.source_priority.QualityDataHelper
 import com.lagradost.cloudstream3.ui.player.source_priority.QualityDataHelper.getLinkPriority
 import com.lagradost.cloudstream3.ui.player.source_priority.QualityProfileDialog
+import com.lagradost.cloudstream3.ui.lite.liteLinkLabel
+import com.lagradost.cloudstream3.ui.lite.LiteCandidate
+import com.lagradost.cloudstream3.ui.lite.chooseLiteUpgrade
+import com.lagradost.cloudstream3.ui.lite.chooseLiteStart
+import com.lagradost.cloudstream3.ui.lite.parseLiteLinkName
+import com.lagradost.cloudstream3.ui.lite.rankLiteLinks
+import com.lagradost.cloudstream3.ui.lite.LitePlaybackMetrics
+import com.lagradost.cloudstream3.ui.lite.LiteStartupDeadline
+import com.lagradost.cloudstream3.ui.lite.usesLitePlayback
 import com.lagradost.cloudstream3.ui.result.ACTION_CLICK_DEFAULT
 import com.lagradost.cloudstream3.ui.result.EpisodeAdapter
 import com.lagradost.cloudstream3.ui.result.FOCUS_SELF
@@ -181,6 +194,132 @@ class GeneratorPlayer : FullScreenPlayer() {
 
     private var currentSelectedLink: Pair<ExtractorLink?, ExtractorUri?>? = null
     private var currentSelectedSubtitles: SubtitleData? = null
+    private val liteMetrics = LitePlaybackMetrics()
+    private var liteMetricsInstance: Int? = null
+    private var liteNetworkEpoch: Long? = null
+    private fun isLitePlayback(): Boolean = ::viewModel.isInitialized &&
+        usesLitePlayback(isLayout(PHONE), viewModel.state.generatorState?.response?.apiName)
+    private var litePlaybackInstance: Int? = null
+    private var liteAwaitingRecovery = false
+    private var liteFinalChoiceMade = false
+    private var liteManualSource = false
+    private var liteStartupJob: Job? = null
+    private val liteSlowStarts = mutableSetOf<String>()
+    private var liteHandlingError = false
+
+    private fun watchLiteStartup(link: VideoLink) {
+        val id = linkIdentity(link)
+        val instance = viewModel.state.instance
+        val deadline = LiteStartupDeadline(android.os.SystemClock.elapsedRealtime())
+        liteStartupJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && instance == viewModel.state.instance &&
+                currentSelectedLink?.let(::linkIdentity) == id) {
+                delay(250)
+                if (instance != viewModel.state.instance || currentSelectedLink?.let(::linkIdentity) != id) return@launch
+                val native = playerView?.player
+                val active = viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                    native?.playWhenReady == true && native.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE &&
+                    selectSourceDialog?.isShowing != true
+                val expired = deadline.update(android.os.SystemClock.elapsedRealtime(), active,
+                    native?.isPlaying == true || liteMetrics.hasPlayed(id),
+                    native?.bufferedPosition ?: 0)
+                if (deadline.started) {
+                    liteSlowStarts.remove(id)
+                    return@launch
+                }
+                if (!expired) continue
+                // A soft timeout never hides a source from the user's manual selector.
+                liteSlowStarts.add(id)
+                val next = orderedPlaybackLinks().firstOrNull {
+                    it.shouldUseLink && it.link !in viewModel.state.erroredLinks &&
+                        linkIdentity(it.link) != id && linkIdentity(it.link) !in liteSlowStarts
+                } ?: continue // Keep this attempt alive while more links are extracted.
+                loadLink(next.link, true, preservePlaybackState = true, automaticStartup = true)
+                return@launch
+            }
+        }
+    }
+
+    private fun linkIdentity(link: VideoLink): String = link.first?.let {
+        listOf(it.url, it.type, it.referer, it.headers.toSortedMap(), it.source, it.name, it.quality).toString()
+    } ?: link.second.toString()
+
+    private fun updateLiteMetricsSession() {
+        val network = (context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)
+            ?.activeNetwork?.hashCode()?.toLong() ?: 0L
+        if (liteMetricsInstance != viewModel.state.instance || liteNetworkEpoch != network) {
+            liteMetrics.reset(network)
+            liteMetricsInstance = viewModel.state.instance
+            liteNetworkEpoch = network
+        }
+    }
+
+    private fun prepareLitePlaybackInstance() {
+        if (litePlaybackInstance == viewModel.state.instance) return
+        litePlaybackInstance = viewModel.state.instance
+        liteFinalChoiceMade = false
+        liteManualSource = false
+        liteAwaitingRecovery = false
+        liteStartupJob?.cancel()
+        liteSlowStarts.clear()
+        releasePlayer()
+        updateLiteMetricsSession()
+    }
+
+    private fun liteCandidate(display: DisplayLink): LiteCandidate {
+        val link = display.link
+        val id = linkIdentity(link)
+        return LiteCandidate(id, parseLiteLinkName(link.first?.name ?: link.second?.name.orEmpty()),
+            link.first?.quality, failed = link in viewModel.state.erroredLinks,
+            startupMs = liteMetrics.snapshot(id)?.startupMs)
+    }
+
+    private fun orderedPlaybackLinks(): List<DisplayLink> {
+        val links = viewModel.state.sortLinks(currentQualityProfile)
+        if (!isLitePlayback()) return links
+        updateLiteMetricsSession()
+        val byIdentity = links.associateBy { linkIdentity(it.link) }
+        return rankLiteLinks(links.map(::liteCandidate)).mapNotNull { byIdentity[it.id] }
+    }
+
+    @MainThread
+    private fun maybeStartLitePlayback(extractionComplete: Boolean) {
+        prepareLitePlaybackInstance()
+        val links = orderedPlaybackLinks()
+        if (extractionComplete && !liteFinalChoiceMade) {
+            liteFinalChoiceMade = true
+            if (isPlayerActive.get() && !liteAwaitingRecovery && !liteManualSource &&
+                viewModel.state.loading is Resource.Success && selectSourceDialog?.isShowing != true
+            ) {
+                val currentId = currentSelectedLink?.let(::linkIdentity)
+                val upgrade = currentId?.let { chooseLiteUpgrade(links.filter {
+                    it.shouldUseLink && linkIdentity(it.link) !in liteSlowStarts
+                }.map(::liteCandidate), it) }
+                links.firstOrNull { linkIdentity(it.link) == upgrade }?.let {
+                    loadLink(it.link, true, preservePlaybackState = true, automaticStartup = true)
+                }
+            }
+        }
+        if (liteAwaitingRecovery) {
+            val next = getNextLink()
+            if (next != null) {
+                liteAwaitingRecovery = false
+                loadLink(next.link, true, automaticStartup = true)
+            } else if (extractionComplete) noLinksFound()
+            return
+        }
+        val id = chooseLiteStart(links.filter { it.shouldUseLink }.map(::liteCandidate),
+            extractionComplete, isPlayerActive.get())
+        if (id == null) {
+            if (extractionComplete && !isPlayerActive.get()) noLinksFound()
+            return
+        }
+        val chosen = links.firstOrNull { linkIdentity(it.link) == id } ?: return
+        if (!isPlayerActive.compareAndSet(false, true)) return
+        loadLink(chosen.link, false, automaticStartup = true)
+        showPlayerMetadata()
+    }
+
     private val currentMeta: Any? get() = viewModel.state.generatorState?.meta
     private val nextMeta: Any? get() = viewModel.state.generatorState?.nextMeta
 
@@ -438,6 +577,7 @@ class GeneratorPlayer : FullScreenPlayer() {
 
     override fun playerUpdated(player: Any?) {
         super.playerUpdated(player)
+        liteMetrics.attach(if (isLitePlayback()) player else null)
 
         // Cancel the notification when released
         if (player == null) {
@@ -497,8 +637,13 @@ class GeneratorPlayer : FullScreenPlayer() {
         }
     }
 
-    private fun loadLink(link: VideoLink?, sameEpisode: Boolean) {
+    private fun loadLink(link: VideoLink?, sameEpisode: Boolean, preservePlaybackState: Boolean = false, automaticStartup: Boolean = false) {
         if (link == null) return
+        liteStartupJob?.cancel()
+        if (isLitePlayback()) prepareLitePlaybackInstance()
+        // Buffering is not a user pause. Snapshot intent before detaching the old player.
+        val shouldPlay = if (preservePlaybackState) playerView?.player?.playWhenReady ?: player.getIsPlaying() else true
+        liteAwaitingRecovery = false
         isPlayerActive.set(true)
         // manage UI
         binding?.playerLoadingOverlay?.isVisible = false
@@ -516,6 +661,14 @@ class GeneratorPlayer : FullScreenPlayer() {
         // uiReset() // Removed due to UX
 
         currentSelectedLink = link
+        if (isLitePlayback()) {
+            updateLiteMetricsSession()
+            liteMetrics.select(
+                linkIdentity(link),
+                android.net.Uri.parse(link.first?.url ?: link.second?.uri.toString()).host.orEmpty(),
+                link.first?.type?.name ?: "LOCAL", System.nanoTime() / 1_000_000
+            )
+        }
         //  setEpisodes(viewModel.getAllMeta() ?: emptyList())
         setPlayerDimen(null)
         setTitle()
@@ -539,6 +692,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                 (if (sameEpisode) currentSelectedSubtitles else null) ?: getAutoSelectSubtitle(
                     subtitles, settings = true, downloads = true
                 ),
+                autoPlay = shouldPlay,
                 preview = true
             )
         }
@@ -547,6 +701,10 @@ class GeneratorPlayer : FullScreenPlayer() {
             player.addTimeStamps(emptyList()) // clear stamps
             // Resets subtitle delay, as we watch some other content
             player.setSubtitleOffset(0)
+        }
+        if (isLitePlayback() && automaticStartup && link.first?.type in setOf(
+                ExtractorLinkType.VIDEO, ExtractorLinkType.M3U8, ExtractorLinkType.DASH)) {
+            watchLiteStartup(link)
         }
     }
 
@@ -1114,47 +1272,87 @@ class GeneratorPlayer : FullScreenPlayer() {
                     }
                 }
 
+                val liteDialog = isLitePlayback()
+                val dialogInstance = viewModel.state.instance
+                var selectedSourceId = currentSelectedLink?.let(::linkIdentity)
                 var sourceIndex = 0
                 var startSource = 0
+                val liveSourcesAdapter = ArrayAdapter<String>(ctx, R.layout.sort_bottom_single_choice)
+                val searchingFooter = if (liteDialog) {
+                    (layoutInflater.inflate(R.layout.sort_bottom_footer_add_choice, null) as TextView).apply {
+                        setText(R.string.lite_searching_servers)
+                        setCompoundDrawables(null, null, null, null)
+                        providerList.addFooterView(this, null, false)
+                    }
+                } else null
+                if (liteDialog) {
+                    providerList.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+                    providerList.adapter = liveSourcesAdapter
+                }
                 // Filtered and sorted links
                 var currentHiddenFooter: View? = null
                 var filteredLinks: List<DisplayLink> = emptyList()
 
                 fun refreshLinks(qualityProfile: Int) {
                     val currentLinkUsed = currentSelectedLink
+                    val previousFirstId = filteredLinks.getOrNull(providerList.firstVisiblePosition)?.link?.let(::linkIdentity)
+                    val previousTop = providerList.getChildAt(0)?.top ?: 0
+                    val focusedId = filteredLinks.getOrNull(providerList.selectedItemPosition)?.link?.let(::linkIdentity)
+                    val hadFocus = providerList.hasFocus()
                     // Always display current linkFooter
-                    val sortedLinks = viewModel.state.sortLinks(qualityProfile)
+                    val sortedLinks = if (isLitePlayback()) orderedPlaybackLinks() else viewModel.state.sortLinks(qualityProfile)
 
                     filteredLinks = sortedLinks.filter { it.shouldUseLink || it.link == currentLinkUsed }
 
-                    if (sortedLinks.isEmpty()) {
-                        sourceDialog.findViewById<LinearLayout>(R.id.sort_sources_holder)?.isGone =
-                            true
-                    } else {
+                    searchingFooter?.isVisible = viewModel.state.loading is Resource.Loading
+                    sourceDialog.findViewById<LinearLayout>(R.id.sort_sources_holder)?.isGone =
+                        sortedLinks.isEmpty() && !liteDialog
+                    if (sortedLinks.isNotEmpty() || liteDialog) {
                         startSource = filteredLinks.indexOfFirst { it.link == currentLinkUsed }
-                        sourceIndex = startSource
+                        if (liteDialog && selectedSourceId == null) selectedSourceId = currentLinkUsed?.let(::linkIdentity)
+                        sourceIndex = if (liteDialog) filteredLinks.indexOfFirst { linkIdentity(it.link) == selectedSourceId } else startSource
 
-                        val sourcesArrayAdapter =
+                        val sourcesArrayAdapter = if (liteDialog) liveSourcesAdapter else
                             ArrayAdapter<String>(ctx, R.layout.sort_bottom_single_choice)
-
+                        sourcesArrayAdapter.setNotifyOnChange(false)
+                        sourcesArrayAdapter.clear()
                         sourcesArrayAdapter.addAll(filteredLinks.map { displayLink ->
                             val (link, uri) = displayLink.link
                             val name = link?.name ?: uri?.name ?: "NULL"
-                            "$name ${Qualities.getStringByInt(link?.quality)}"
+                            if (liteDialog) {
+                                val info = parseLiteLinkName(name)
+                                val secondary = listOfNotNull(info.source.takeIf { it.isNotBlank() },
+                                    ctx.getString(R.string.lite_server_playing).takeIf { displayLink.link == currentLinkUsed }).joinToString(" · ")
+                                liteLinkLabel(info, link?.quality) + if (secondary.isEmpty()) "" else "\n$secondary"
+                            } else "$name ${Qualities.getStringByInt(link?.quality)}"
                         })
+                        sourcesArrayAdapter.notifyDataSetChanged()
 
                         providerList.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-                        providerList.adapter = sourcesArrayAdapter
-                        providerList.setSelection(sourceIndex)
-                        providerList.setItemChecked(sourceIndex, true)
+                        if (!liteDialog) providerList.adapter = sourcesArrayAdapter
+                        providerList.clearChoices()
+                        if (sourceIndex >= 0) providerList.setItemChecked(sourceIndex, true)
+                        if (liteDialog) {
+                            val first = filteredLinks.indexOfFirst { linkIdentity(it.link) == previousFirstId }
+                            providerList.setSelectionFromTop(if (first >= 0) first else sourceIndex.coerceAtLeast(0), previousTop)
+                            if (hadFocus) {
+                                val focus = filteredLinks.indexOfFirst { linkIdentity(it.link) == focusedId }
+                                if (focus >= 0 && providerList.isInTouchMode.not()) providerList.setSelection(focus)
+                                providerList.requestFocus()
+                            }
+                        } else providerList.setSelection(sourceIndex)
 
                         providerList.setOnItemClickListener { _, _, which, _ ->
+                            if (liteDialog) {
+                                selectedSourceId = filteredLinks.getOrNull(which)?.link?.let(::linkIdentity)
+                                    ?: return@setOnItemClickListener
+                            }
                             sourceIndex = which
                             providerList.setItemChecked(which, true)
                         }
 
                         providerList.setOnItemLongClickListener { _, _, position, _ ->
-                            sortedLinks.getOrNull(position)?.link?.first?.url?.let {
+                            filteredLinks.getOrNull(position)?.link?.first?.url?.let {
                                 clipboardHelper(
                                     txt(R.string.video_source),
                                     it
@@ -1186,9 +1384,21 @@ class GeneratorPlayer : FullScreenPlayer() {
 
                 refreshLinks(currentQualityProfile)
 
+                fun refreshLiveSources() {
+                    if (viewModel.state.instance != dialogInstance) sourceDialog.dismissSafe(activity)
+                    else refreshLinks(currentQualityProfile)
+                }
+                val linksObserver = Observer<VideoLive<Set<VideoLink>>> { refreshLiveSources() }
+                val loadingObserver = Observer<VideoLive<Resource<Unit>>> { refreshLiveSources() }
                 sourceDialog.setOnDismissListener {
+                    viewModel.currentLinks.removeObserver(linksObserver)
+                    viewModel.loadingLinks.removeObserver(loadingObserver)
                     if (shouldDismiss) dismiss()
-                    selectSourceDialog = null
+                    if (selectSourceDialog === sourceDialog) selectSourceDialog = null
+                }
+                if (liteDialog) {
+                    viewModel.currentLinks.observe(viewLifecycleOwner, linksObserver)
+                    viewModel.loadingLinks.observe(viewLifecycleOwner, loadingObserver)
                 }
 
 
@@ -1381,7 +1591,19 @@ class GeneratorPlayer : FullScreenPlayer() {
                 }
 
                 binding.applyBtt.setOnClickListener {
-                    var init = sourceIndex != startSource
+                    val selectedLink = if (liteDialog) orderedPlaybackLinks().firstOrNull {
+                        linkIdentity(it.link) == selectedSourceId && (it.shouldUseLink || it.link == currentSelectedLink)
+                    } else filteredLinks.getOrNull(sourceIndex)
+                    if (liteDialog && selectedSourceId != null && selectedLink == null) {
+                        showToast(R.string.no_links_found_toast, Toast.LENGTH_SHORT)
+                        return@setOnClickListener
+                    }
+                    if (liteDialog) {
+                        liteManualSource = true
+                        liteStartupJob?.cancel()
+                    }
+                    var init = if (liteDialog) selectedLink?.link?.let(::linkIdentity) != currentSelectedLink?.let(::linkIdentity)
+                        else sourceIndex != startSource
                     if (subtitleGroupIndex != subtitleGroupIndexStart || subtitleOptionIndex != subtitleOptionIndexStart) {
                         init = init or if (subtitleGroupIndex <= 0) {
                             noSubtitles()
@@ -1394,9 +1616,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                         }
                     }
                     if (init) {
-                        filteredLinks.getOrNull(sourceIndex)?.let {
-                            loadLink(it.link, true)
-                        }
+                        selectedLink?.let { loadLink(it.link, true) }
                     }
                     sourceDialog.dismissSafe(activity)
                     selectSourceDialog = null
@@ -1563,6 +1783,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     override fun playerError(exception: Throwable) {
+        liteStartupJob?.cancel()
         currentSelectedLink?.let { link ->
             viewModel.modifyState { this.addError(link) }
         }
@@ -1581,15 +1802,24 @@ class GeneratorPlayer : FullScreenPlayer() {
                     "isPlaying=${player.getIsPlaying()}", exception
         )
 
+        if (isLitePlayback() && !hasNextMirror() && viewModel.state.loading is Resource.Loading) {
+            liteAwaitingRecovery = true
+            return
+        }
         if (!hasNextMirror()) {
             viewModel.forceClearCache = true
         }
-        super.playerError(exception)
+        liteHandlingError = isLitePlayback()
+        try {
+            super.playerError(exception)
+        } finally {
+            liteHandlingError = false
+        }
     }
 
     private fun noLinksFound() {
         viewModel.forceClearCache = true
-        val hiddenLinks = viewModel.state.sortLinks(currentQualityProfile).count { !it.shouldUseLink }
+        val hiddenLinks = orderedPlaybackLinks().count { !it.shouldUseLink }
 
         context?.let { ctx ->
             // Display that there are hidden links to the user.
@@ -1609,14 +1839,19 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     private fun startPlayer() {
+        if (isLitePlayback()) {
+            prepareLitePlaybackInstance()
+            liteManualSource = true
+            liteStartupJob?.cancel()
+        }
         // We don't want double load when you skip loading
         if (isPlayerActive.get()) {
             return
         }
 
-        val links = viewModel.state.sortLinks(currentQualityProfile)
+        val links = orderedPlaybackLinks()
 
-        val firstAvailableLink = links.firstOrNull { it.shouldUseLink }?.link
+        val firstAvailableLink = links.firstOrNull { it.shouldUseLink && (!isLitePlayback() || it.link !in viewModel.state.erroredLinks) }?.link
         if (firstAvailableLink == null) {
             noLinksFound()
             return
@@ -1693,7 +1928,12 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     private fun getNextLink(): DisplayLink? {
-        val links = viewModel.state.sortLinks(currentQualityProfile)
+        val links = orderedPlaybackLinks()
+        if (isLitePlayback()) return links.firstOrNull {
+            it.shouldUseLink && it.link !in viewModel.state.erroredLinks &&
+                linkIdentity(it.link) !in liteSlowStarts &&
+                linkIdentity(it.link) != currentSelectedLink?.let(::linkIdentity)
+        }
         val currentIndex = links.indexOfFirst { it.link == currentSelectedLink }
         val nextPotentialLink =
             links.withIndex().firstOrNull { it.index > currentIndex && it.value.shouldUseLink }
@@ -1705,16 +1945,28 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     override fun nextMirror() {
+        if (isLitePlayback()) liteManualSource = true
         val nextLink = getNextLink()
         if (nextLink == null) {
+            if (isLitePlayback() && viewModel.state.loading is Resource.Loading) {
+                liteAwaitingRecovery = true
+                return
+            }
             noLinksFound()
             return
         }
 
-        loadLink(nextLink.link, true)
+        loadLink(nextLink.link, true, automaticStartup = liteHandlingError)
+    }
+
+    override fun onDestroyView() {
+        liteStartupJob?.cancel()
+        selectSourceDialog?.dismissSafe(activity)
+        super.onDestroyView()
     }
 
     override fun onDestroy() {
+        liteMetrics.close()
         ResultFragment.updateUI()
         currentVerifyLink?.cancel()
         super.onDestroy()
@@ -1790,7 +2042,10 @@ class GeneratorPlayer : FullScreenPlayer() {
 
         }
 
-        if (percentage >= PRELOAD_NEXT_EPISODE_PERCENTAGE) {
+        // Progressive extraction owns currentJob until it completes; preloading cancels it.
+        if (percentage >= PRELOAD_NEXT_EPISODE_PERCENTAGE &&
+            !(isLitePlayback() && viewModel.state.loading is Resource.Loading)
+        ) {
             viewModel.preLoadNextLinks()
         }
     }
@@ -2298,9 +2553,9 @@ class GeneratorPlayer : FullScreenPlayer() {
         }
 
         binding.overlayLoadingSkipButton.setOnClickListener {
-            // Mark as "success" early
-            viewModel.modifyState {
-                copy(loading = Resource.Success(Unit))
+            if (isLitePlayback()) startPlayer() else {
+                // Legacy skip-loading behavior.
+                viewModel.modifyState { copy(loading = Resource.Success(Unit)) }
             }
         }
 
@@ -2338,6 +2593,16 @@ class GeneratorPlayer : FullScreenPlayer() {
         observe(viewModel.loadingLinks) { (loading, instance) ->
             if (instance != viewModel.state.instance) return@observe // Outdated observe
 
+            if (isLitePlayback()) {
+                prepareLitePlaybackInstance()
+                // Other LiveData deliveries may already reflect a newer value of this same instance.
+                val currentLoading = viewModel.state.loading
+                if (currentLoading is Resource.Failure && loading is Resource.Failure) {
+                    showToast(currentLoading.errorString, Toast.LENGTH_LONG)
+                }
+                maybeStartLitePlayback(currentLoading !is Resource.Loading)
+                return@observe
+            }
             when (loading) {
                 is Resource.Loading -> {
                     releasePlayer()
@@ -2361,7 +2626,7 @@ class GeneratorPlayer : FullScreenPlayer() {
         observe(viewModel.currentLinks) { (_, instance) ->
             if (instance != viewModel.state.instance) return@observe // Outdated observe
 
-            val sortedLinks = viewModel.state.sortLinks(currentQualityProfile)
+            val sortedLinks = orderedPlaybackLinks()
             val usableLinks = sortedLinks.count { link -> link.shouldUseLink }
 
             val turnVisible = usableLinks > 0 && viewModel.generator?.canSkipLoading == true
@@ -2379,7 +2644,9 @@ class GeneratorPlayer : FullScreenPlayer() {
             }
 
             safe {
-                if (!isPlayerActive.get() && viewModel.state.links.any { link ->
+                if (isLitePlayback()) {
+                    maybeStartLitePlayback(viewModel.state.loading !is Resource.Loading)
+                } else if (!isPlayerActive.get() && viewModel.state.links.any { link ->
                         getLinkPriority(currentQualityProfile, link.first) >=
                                 QualityDataHelper.AUTO_SKIP_PRIORITY
                     }

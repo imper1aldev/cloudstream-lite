@@ -1,0 +1,4 @@
+<resources>
+    <string name="lite_search_catalog">Search titles</string>
+    <item type="id" name="lite_search_compose" />
+</resources>

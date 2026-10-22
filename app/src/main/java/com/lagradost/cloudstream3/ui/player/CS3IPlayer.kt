@@ -291,6 +291,7 @@ class CS3IPlayer : IPlayer {
         preview: Boolean,
     ) {
         Log.i(TAG, "loadPlayer")
+        val shouldPlay = autoPlay ?: exoPlayer?.playWhenReady ?: isPlaying
         if (sameEpisode) {
             saveData()
         } else {
@@ -302,11 +303,9 @@ class CS3IPlayer : IPlayer {
             playbackPosition = it
         }
 
-        // we want autoplay because of TV and UX
-        isPlaying = autoPlay ?: isPlaying
-
-        // release the current exoplayer and cache
+        // Old-player pause callbacks must not overwrite the successor's play intent.
         releasePlayer()
+        isPlaying = shouldPlay
 
         if (link != null) {
             // only video support atm

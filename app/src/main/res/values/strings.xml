@@ -27,8 +27,6 @@
     <string name="new_update_format" formatted="true">New update found!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">Play with CloudStream</string>
     <string name="title_home">Home</string>
     <string name="title_search">Search</string>
     <string name="title_downloads">Downloads</string>
@@ -523,6 +521,11 @@
     <string name="delete_repository">Delete repository</string>
     <string name="delete_plugin">Delete plugin</string>
     <string name="setup_extensions_subtext">Download the list of sites you want to use</string>
+    <string name="setup_extensions_loading">Installing extensions…</string>
+    <string name="setup_extensions_success">Extensions installed</string>
+    <string name="setup_extensions_failed">Could not install the extensions. Please try again.</string>
+    <string name="setup_extensions_offline">No internet connection. Connect to the internet and try again.</string>
+    <string name="retry">Retry</string>
     <string name="plugins_downloaded" formatted="true">Downloaded: %d</string>
     <string name="plugins_disabled" formatted="true">Disabled: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Not downloaded: %d</string>
@@ -813,4 +816,6 @@
         <item quantity="other">%d downloads queued</item>
     </plurals>
     <string name="player_is_live">Live</string>
+    <string name="lite_hero_details">Details</string>
+    <string name="lite_row_bookmarks">My list</string>
 </resources>

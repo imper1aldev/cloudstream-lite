@@ -8,12 +8,15 @@ import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.MainActivity.Companion.afterRepositoryLoadedEvent
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.FragmentSetupExtensionsBinding
+import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.plugins.RepositoryManager
 import com.lagradost.cloudstream3.plugins.RepositoryManager.PREBUILT_REPOSITORIES
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.settings.extensions.PluginsViewModel
+import com.lagradost.cloudstream3.ui.settings.extensions.PluginsViewModel.EnsureState
 import com.lagradost.cloudstream3.ui.settings.extensions.RepoAdapter
+import com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData
 import com.lagradost.cloudstream3.utils.Coroutines.main
 import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 
@@ -32,6 +35,8 @@ class SetupFragmentExtensions : BaseFragment<FragmentSetupExtensionsBinding>(
             }
         }
     }
+
+    private var ensureRepository: RepositoryData? = null
 
     override fun onResume() {
         super.onResume()
@@ -53,10 +58,11 @@ class SetupFragmentExtensions : BaseFragment<FragmentSetupExtensionsBinding>(
             val hasRepos = repositories.isNotEmpty()
             binding?.repoRecyclerView?.isVisible = hasRepos
             binding?.blankRepoScreen?.isVisible = !hasRepos
+            ensureRepository = ensureRepository ?: repositories.firstOrNull()
 
             if (hasRepos) {
                 binding?.repoRecyclerView?.adapter = RepoAdapter(true, {}, {
-                    PluginsViewModel.downloadAll(activity, it, null)
+                    ensurePlugins(it)
                 }).apply { submitList(repositories.toList()) }
             }
 //            else {
@@ -68,16 +74,42 @@ class SetupFragmentExtensions : BaseFragment<FragmentSetupExtensionsBinding>(
         }
     }
 
+    private fun ensurePlugins(repository: RepositoryData) {
+        ensureRepository = repository
+        PluginsViewModel.downloadAll(activity, repository, null)
+    }
+
+    private fun showEnsureState(state: EnsureState) {
+        binding?.apply {
+            ensureStateHolder.isVisible = state != EnsureState.IDLE
+            ensureProgress.isVisible = state == EnsureState.LOADING
+            ensureRetryBtt.isVisible = state == EnsureState.FAILED || state == EnsureState.OFFLINE
+            ensureText.setText(
+                when (state) {
+                    EnsureState.IDLE, EnsureState.LOADING -> R.string.setup_extensions_loading
+                    EnsureState.SUCCESS -> R.string.setup_extensions_success
+                    EnsureState.FAILED -> R.string.setup_extensions_failed
+                    EnsureState.OFFLINE -> R.string.setup_extensions_offline
+                }
+            )
+        }
+    }
+
     override fun onBindingCreated(binding: FragmentSetupExtensionsBinding) {
         val isSetup = arguments?.getBoolean(SETUP_EXTENSION_BUNDLE_IS_SETUP) ?: false
 
         safe {
             setRepositories()
+            observe(PluginsViewModel.ensureState, ::showEnsureState)
             binding.apply {
                 if (!isSetup) {
                     nextBtt.setText(R.string.setup_done)
                 }
                 prevBtt.isVisible = isSetup
+
+                ensureRetryBtt.setOnClickListener {
+                    ensureRepository?.let(::ensurePlugins)
+                }
 
                 nextBtt.setOnClickListener {
                     // Continue setup

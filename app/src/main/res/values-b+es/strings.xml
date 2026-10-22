@@ -2,6 +2,11 @@
 <resources>
     <string name="pref_category_extensions">Extensiones</string>
     <string name="setup_extensions_subtext">Descargue la lista de sitios que quiera utilizar</string>
+    <string name="setup_extensions_loading">Instalando extensiones…</string>
+    <string name="setup_extensions_success">Extensiones instaladas</string>
+    <string name="setup_extensions_failed">No se pudieron instalar las extensiones. Inténtalo de nuevo.</string>
+    <string name="setup_extensions_offline">Sin conexión a internet. Conéctate y vuelve a intentarlo.</string>
+    <string name="retry">Reintentar</string>
     <string name="plugins_downloaded" formatted="true">Descargado:%d</string>
     <string name="downloaded">Descargado</string>
     <string name="batch_download_finish_format" formatted="true">Descargado %1$d %2$s</string>
@@ -107,8 +112,8 @@
     <string name="cast_format" formatted="true">Reparto: %s</string>
     <string name="filler" formatted="true">Relleno</string>
     <string name="duration_format" formatted="true">%d min</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">Reproducir con Cloudstream</string>
+    <string name="app_name">NexoStream</string>
+    <string name="play_with_app_name">Reproducir con NexoStream</string>
     <string name="title_home">Inicio</string>
     <string name="title_search">Buscar</string>
     <string name="title_downloads">Descargas</string>

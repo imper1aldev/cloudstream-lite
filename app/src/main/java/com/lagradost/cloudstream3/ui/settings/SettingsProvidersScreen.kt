@@ -78,12 +78,6 @@ object SettingsProvidersScreen : SearchableSettings {
                 DubStatus.Dubbed.name to stringResource(R.string.app_dubbed_text),
                 DubStatus.Subbed.name to stringResource(R.string.app_subbed_text),
             )
-        ), Preference.PreferenceItem.TextPreference(
-            title = stringResource(R.string.test_extensions),
-            subtitle = stringResource(R.string.test_extensions_summary),
-            icon = painterResource(R.drawable.baseline_network_ping_24),
-            onClick = {
-                activity?.navigate(R.id.navigation_test_providers)
-            }))
+        ))
     }
 }

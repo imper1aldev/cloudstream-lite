@@ -1,0 +1,127 @@
+name: NexoStream release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        options: [stable, prerelease]
+        required: true
+      version_code:
+        description: Positive Android version code, greater than previous releases of this channel
+        type: string
+        required: true
+      version_name:
+        description: Explicit version name, for example 0.1.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexostream-release-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'imper1aldev/cloudstream-lite'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      NEXO_CHANNEL: ${{ inputs.channel }}
+      NEXO_VERSION_CODE: ${{ inputs.version_code }}
+      NEXO_VERSION_NAME: ${{ inputs.version_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Validate inputs and prepare own signing key
+        shell: bash
+        env:
+          NEXO_KEYSTORE_BASE64: ${{ secrets.NEXO_KEYSTORE_BASE64 }}
+          NEXO_KEY_ALIAS: ${{ secrets.NEXO_KEY_ALIAS }}
+          NEXO_KEY_PASSWORD: ${{ secrets.NEXO_KEY_PASSWORD }}
+          NEXO_STORE_PASSWORD: ${{ secrets.NEXO_STORE_PASSWORD }}
+        run: bash .github/scripts/prepare-nexo-signing.sh
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            25
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Accept SDK licenses for Gradle platform provisioning
+        shell: bash
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses >/dev/null
+          set -o pipefail
+      - name: Build signed universal APK
+        shell: bash
+        env:
+          SIGNING_KEY_ALIAS: ${{ secrets.NEXO_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.NEXO_KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.NEXO_STORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          case "$NEXO_CHANNEL" in
+            stable) variant=StableRelease ;;
+            prerelease) variant=PrereleaseRelease ;;
+            *) exit 1 ;;
+          esac
+          ./gradlew ":app:assemble${variant}" --no-configuration-cache --console=plain
+          mkdir -p dist
+          python3 - <<'PY'
+          import json, os, pathlib, shutil
+          channel=os.environ['NEXO_CHANNEL']
+          metadata=pathlib.Path(f'app/build/outputs/apk/{channel}/release/output-metadata.json')
+          data=json.loads(metadata.read_text())
+          expected='com.imper1aldev.nexostream'+('.prerelease' if channel=='prerelease' else '')
+          assert data['applicationId']==expected
+          elements=data['elements']
+          assert len(elements)==1 and not elements[0]['filters'], 'Expected universal APK'
+          assert elements[0]['versionCode']==int(os.environ['NEXO_VERSION_CODE'])
+          expected_version=os.environ['NEXO_VERSION_NAME']+('-PRE' if channel=='prerelease' else '')
+          assert elements[0]['versionName']==expected_version
+          shutil.copyfile(metadata.parent/elements[0]['outputFile'],f'dist/NexoStream-{channel}-universal.apk')
+          PY
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          test -n "$signer"
+          "$signer" verify "dist/NexoStream-${NEXO_CHANNEL}-universal.apk"
+          (cd dist && sha256sum "NexoStream-${NEXO_CHANNEL}-universal.apk" > "NexoStream-${NEXO_CHANNEL}-universal.apk.sha256")
+      - name: Publish to the owned repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="NexoStream ${NEXO_VERSION_NAME}. Android version code: ${NEXO_VERSION_CODE}. <!-- nexostream-version-code: ${NEXO_VERSION_CODE} -->"
+          if [[ "$NEXO_CHANNEL" == prerelease ]]; then
+            tag=pre-release
+            prerelease=true
+            latest=false
+          else
+            tag="v${NEXO_VERSION_NAME}"
+            prerelease=false
+            latest=true
+          fi
+          if existing=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft); then
+            if [[ "$NEXO_CHANNEL" == stable && "$existing" != true ]]; then
+              echo 'A published stable release cannot be overwritten' >&2
+              exit 1
+            fi
+            # Hide a rolling release until the tag and every asset agree.
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=true
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" -f "sha=$GITHUB_SHA" -F force=true
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "NexoStream ${NEXO_VERSION_NAME}" --notes "$notes" --draft=true --prerelease="$prerelease"
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "NexoStream ${NEXO_VERSION_NAME}" --notes "$notes" --draft --prerelease="$prerelease"
+          fi
+          gh release upload "$tag" dist/*.apk dist/*.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease="$prerelease" --latest="$latest"
+      - name: Remove temporary signing key
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/nexostream-release.jks"

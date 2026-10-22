@@ -1,0 +1,5 @@
+<resources>
+    <string name="nexo_no_release">No NexoStream release has been published for this channel.</string>
+    <string name="nexo_no_compatible_apk">No compatible NexoStream APK is available for this device.</string>
+    <string name="nexo_update_query_failed">Could not check for updates. Please try again.</string>
+</resources>

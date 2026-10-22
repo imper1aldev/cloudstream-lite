@@ -170,8 +170,8 @@
 
     <fragment
         android:id="@+id/navigation_library"
-        android:name="com.lagradost.cloudstream3.ui.library.LibraryFragment"
-        android:label="@string/library"
+        android:name="com.lagradost.cloudstream3.ui.library.FavoritesFragment"
+        android:label="@string/favorites_list_name"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"
         app:popEnterAnim="@anim/enter_anim"
@@ -291,7 +291,7 @@
 
     <fragment
         android:id="@+id/navigation_home"
-        android:name="com.lagradost.cloudstream3.ui.home.HomeFragment"
+        android:name="com.lagradost.cloudstream3.ui.home.HomeFragment2"
         android:label="@string/title_home"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"
@@ -309,13 +309,17 @@
 
     <fragment
         android:id="@+id/navigation_search"
-        android:name="com.lagradost.cloudstream3.ui.search.SearchFragment"
+        android:name="com.lagradost.cloudstream3.ui.search.SearchFragment2"
         android:label="@string/title_search"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"
         app:popEnterAnim="@anim/enter_anim"
         app:popExitAnim="@anim/exit_anim"
         tools:layout="@layout/fragment_search">
+        <argument
+            android:name="lite_focus_search"
+            android:defaultValue="false"
+            app:argType="boolean" />
         <argument
             android:name="search_query"
             android:defaultValue=""
@@ -324,7 +328,7 @@
 
     <fragment
         android:id="@+id/navigation_downloads"
-        android:name="com.lagradost.cloudstream3.ui.download.DownloadFragment"
+        android:name="com.lagradost.cloudstream3.ui.library.FavoritesFragment"
         android:label="@string/title_downloads"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"
@@ -486,7 +490,7 @@
 
     <fragment
         android:id="@+id/navigation_results_phone"
-        android:name="com.lagradost.cloudstream3.ui.result.ResultTrailerPlayer"
+        android:name="com.lagradost.cloudstream3.ui.result.ResultFragment2"
         android:layout_height="match_parent"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"

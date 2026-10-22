@@ -10,16 +10,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.CommonActivity.showToast
+import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.PROVIDER_STATUS_DOWN
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.launchSafe
+import com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_API_NAME
+import com.lagradost.cloudstream3.plugins.ALLOWED_PLUGIN_INTERNAL_NAME
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.plugins.PluginManager.getPluginPath
 import com.lagradost.cloudstream3.plugins.PluginWrapper
 import com.lagradost.cloudstream3.plugins.RepositoryManager
+import com.lagradost.cloudstream3.plugins.isAllowedPlugin
+import com.lagradost.cloudstream3.utils.AppContextUtils.isNetworkAvailable
 import com.lagradost.cloudstream3.utils.txt
+import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.main
 import com.lagradost.cloudstream3.utils.Coroutines.runOnMainThread
@@ -32,6 +38,12 @@ import java.io.File
 typealias PluginViewDataUpdate = Pair<Boolean, List<PluginViewData>>
 
 class PluginsViewModel : ViewModel() {
+
+    /**
+     * Visible states of the "ensure repository plugins" flow driven by [downloadAll]
+     * (first-run setup). Every async path ends in SUCCESS, FAILED or OFFLINE.
+     */
+    enum class EnsureState { IDLE, LOADING, SUCCESS, FAILED, OFFLINE }
 
     /** plugins is an unaltered list of plugins */
     private var plugins: List<PluginViewData> = emptyList()
@@ -63,6 +75,17 @@ class PluginsViewModel : ViewModel() {
         private val repositoryCache: MutableMap<String, List<PluginWrapper>> = mutableMapOf()
         const val TAG = "PLG"
 
+        private val _ensureState = MutableLiveData(EnsureState.IDLE)
+        val ensureState: LiveData<EnsureState> = _ensureState
+
+        private fun setEnsureState(state: EnsureState) {
+            Log.i(TAG, "ensureState=$state")
+            _ensureState.postValue(state)
+        }
+
+        private fun failureState(context: Context) =
+            if (context.isNetworkAvailable()) EnsureState.FAILED else EnsureState.OFFLINE
+
         private fun isDownloaded(
             context: Context,
             pluginName: String,
@@ -86,15 +109,34 @@ class PluginsViewModel : ViewModel() {
                 ?.also { repositoryCache[repository.url] = it } ?: emptyList()
         }
 
+        private fun pinAllowedPluginIfNeeded() {
+            if (DataStoreHelper.currentHomePage != null ||
+                PluginManager.getPluginsOnline().none { it.internalName == ALLOWED_PLUGIN_INTERNAL_NAME }
+            ) return
+
+            DataStoreHelper.currentHomePage = ALLOWED_PLUGIN_API_NAME
+            Log.i(TAG, "currentHomePage=${DataStoreHelper.currentHomePage}")
+            MainActivity.mainPluginsLoadedEvent.invoke(false)
+        }
+
         /**
          * @param viewModel optional, updates the plugins livedata for that viewModel if included
          * */
         fun downloadAll(activity: Activity?, repository: RepositoryData, viewModel: PluginsViewModel?) =
             ioSafe {
                 if (activity == null) return@ioSafe
+                setEnsureState(EnsureState.LOADING)
                 val plugins = getPlugins(repository)
 
+                if (plugins.isEmpty()) {
+                    main { showToast(R.string.no_plugins_found_error, Toast.LENGTH_SHORT) }
+                    setEnsureState(failureState(activity))
+                    return@ioSafe
+                }
+
                 plugins.filter { pluginWrapper ->
+                    isAllowedPlugin(pluginWrapper.plugin.internalName, pluginWrapper.repositoryData.url)
+                }.filter { pluginWrapper ->
                     !isDownloaded(
                         activity,
                         pluginWrapper.plugin.internalName,
@@ -104,10 +146,6 @@ class PluginsViewModel : ViewModel() {
                     main {
                         showToast(
                             when {
-                                // No plugins at all
-                                plugins.isEmpty() -> txt(
-                                    R.string.no_plugins_found_error,
-                                )
                                 // All plugins downloaded
                                 list.isEmpty() -> txt(
                                     R.string.batch_download_nothing_to_download_format,
@@ -133,18 +171,24 @@ class PluginsViewModel : ViewModel() {
                         metadata.status != PROVIDER_STATUS_DOWN
                     )
                 }.main { list ->
-                    if (list.any { it }) {
-                        showToast(
-                            txt(
-                                R.string.batch_download_finish_format,
-                                list.count { it },
-                                txt(if (list.size == 1) R.string.plugin_singular else R.string.plugin)
-                            ),
-                            Toast.LENGTH_SHORT
-                        )
-                        viewModel?.updatePluginListPrivate(activity, listOf(repository))
-                    } else if (list.isNotEmpty()) {
-                        showToast(R.string.download_failed, Toast.LENGTH_SHORT)
+                    val downloaded = list.isEmpty() || list.any { it }
+                    try {
+                        if (list.any { it }) {
+                            showToast(
+                                txt(
+                                    R.string.batch_download_finish_format,
+                                    list.count { it },
+                                    txt(if (list.size == 1) R.string.plugin_singular else R.string.plugin)
+                                ),
+                                Toast.LENGTH_SHORT
+                            )
+                            viewModel?.updatePluginListPrivate(activity, listOf(repository))
+                        } else if (list.isNotEmpty()) {
+                            showToast(R.string.download_failed, Toast.LENGTH_SHORT)
+                        }
+                        pinAllowedPluginIfNeeded()
+                    } finally {
+                        setEnsureState(if (downloaded) EnsureState.SUCCESS else failureState(activity))
                     }
                 }
             }
@@ -164,6 +208,15 @@ class PluginsViewModel : ViewModel() {
 
         if (activity == null) return@ioSafe
         val (_, repositoryData, metadata) = pluginWrapper
+
+        val allowed = if (isLocal)
+            metadata.internalName == ALLOWED_PLUGIN_INTERNAL_NAME
+        else
+            isAllowedPlugin(metadata.internalName, repositoryData.url)
+        if (!allowed) {
+            Log.w(TAG, "handlePluginAction rejected non-allowed plugin ${metadata.internalName}")
+            return@ioSafe
+        }
 
         val file = if (isLocal) File(pluginWrapper.plugin.url) else getPluginPath(
             activity,
@@ -210,8 +263,9 @@ class PluginsViewModel : ViewModel() {
         }
 
         val list = plugins.filter {
-            // Show all non-nsfw plugins or all if nsfw is enabled
-            it.plugin.tvTypes?.contains(TvType.NSFW.name) != true || isAdult
+            isAllowedPlugin(it.plugin.internalName, it.repositoryData.url) &&
+                // Show all non-nsfw plugins or all if nsfw is enabled
+                (it.plugin.tvTypes?.contains(TvType.NSFW.name) != true || isAdult)
         }.map { plugin ->
             PluginViewData(plugin, isDownloaded(context, plugin.plugin.internalName, plugin.repositoryData.url))
         }
@@ -302,6 +356,7 @@ class PluginsViewModel : ViewModel() {
         Log.i(TAG, "updatePluginList = local")
 
         val downloadedPlugins = (PluginManager.getPluginsOnline() + PluginManager.getPluginsLocal())
+            .filter { it.internalName == ALLOWED_PLUGIN_INTERNAL_NAME && it.isOnline }
             .distinctBy { it.filePath }
             .map {
                 PluginViewData(PluginWrapper.getLocalPluginWrapper(it.toSitePlugin()), true)

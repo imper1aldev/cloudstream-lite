@@ -77,6 +77,9 @@ interface AppUpdater {
 }
 
 interface GithubRepository {
+    /** Platform-specific build ordering; null retains the default SHA/name policy. */
+    fun isNewerRelease(release: GithubFile): Boolean? = null
+
     @Throws
     suspend fun getRelease(
         userName: String,
@@ -261,10 +264,26 @@ class GithubViewModel(
             copy(dialog = baseDialog)
         }
 
+        val release = repository.getRelease(
+            prerelease = prerelease,
+            userName = remoteUserName,
+            repository = remoteRepository,
+            prereleaseTag = remotePrereleaseTag,
+            contentType = remoteContentType
+        )
+
+        val newerRelease = repository.isNewerRelease(release)
+        if (newerRelease == false) {
+            updateState {
+                copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
+            }
+            return@dispatchUpdate
+        }
+
         // If on pre-release check if the sha matches, as we do not look at the version
         var oldSha: String? = null
         var newSha: String? = null
-        if (prerelease) {
+        if (prerelease && newerRelease == null) {
             val sha = repository.getSha(
                 tag = remotePrereleaseTag,
                 userName = remoteUserName,
@@ -282,16 +301,9 @@ class GithubViewModel(
             }
         }
 
-        val release = repository.getRelease(
-            prerelease = prerelease,
-            userName = remoteUserName,
-            repository = remoteRepository,
-            prereleaseTag = remotePrereleaseTag,
-            contentType = remoteContentType
-        )
 
         // If on stable, only check that the display name matches
-        if (!prerelease && release.displayName == versionName) {
+        if (newerRelease == null && !prerelease && release.displayName == versionName) {
             updateState {
                 copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
             }
