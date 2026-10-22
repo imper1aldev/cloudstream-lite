@@ -56,8 +56,13 @@ jobs:
       - name: Accept SDK licenses for Gradle platform provisioning
         shell: bash
         run: |
+          sdkmanager="${ANDROID_HOME:?ANDROID_HOME must point to the Android SDK}/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$sdkmanager" ]]; then
+            echo "Android SDK manager is missing or not executable: $sdkmanager" >&2
+            exit 1
+          fi
           set +o pipefail
-          yes | sdkmanager --licenses >/dev/null
+          yes | "$sdkmanager" --licenses >/dev/null
           set -o pipefail
       - name: Build signed universal APK
         shell: bash
