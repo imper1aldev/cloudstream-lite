@@ -58,6 +58,9 @@ class NexoTvFavoritesFragment : Fragment(R.layout.nexo_tv_favorites) {
             loadResult(item.url, item.apiName, item.name)
         }, { item -> (item as? FavoritesData)?.let { showOptions(it) }; true }, { item, card ->
             if (!restoring) anchor = TvFocusAnchor("favorites", item.tvItemKey, cards?.currentList?.indexOf(item) ?: 0)
+            bindNexoTvGridEdges(card, ui.nexoTvFavoritesGrid, ui.nexoTvFavoritesOptions, activity?.findViewById(R.id.navigation_library)) {
+                snackbar?.takeIf { it.isShown }?.view?.findViewById(com.google.android.material.R.id.snackbar_action)
+            }
             bindRail(card.id)
         })
         cards = adapter
@@ -92,13 +95,13 @@ class NexoTvFavoritesFragment : Fragment(R.layout.nexo_tv_favorites) {
         model.items.observe(viewLifecycleOwner) { items ->
             val selectedGone = anchor?.itemKey?.let { selected -> items.none { it.tvItemKey == selected } } == true
             if (selectedGone && ui.nexoTvFavoritesGrid.hasFocus()) restoring = true
-            ui.nexoTvFavoritesMessage.text = if (items.isEmpty()) getString(R.string.no_data) else ""
+            ui.nexoTvFavoritesMessage.text = if (!model.hasLoaded) getString(R.string.loading) else if (items.isEmpty()) getString(R.string.no_data) else ""
             ui.nexoTvFavoritesMessage.isVisible = items.isEmpty()
             ui.nexoTvFavoritesOptions.isEnabled = items.isNotEmpty()
             ui.nexoTvFavoritesDownloaded.text = getString(R.string.lite_downloaded_filter) + if (model.onlyDownloaded) " \u2713" else ""
             adapter.submitList(items) {
                 if (binding === ui) {
-                    if (restoring) ui.root.post { restoreFocus() }
+                    if (restoring && model.hasLoaded) ui.root.post { restoreFocus() }
                     val parentId = arguments?.getInt("parentId")?.takeIf { arguments?.containsKey("parentId") == true }
                     if (parentId != null && items.isNotEmpty()) {
                         arguments?.remove("parentId")
@@ -160,8 +163,10 @@ class NexoTvFavoritesFragment : Fragment(R.layout.nexo_tv_favorites) {
     }
     private fun restoreFocus() {
         val ui = binding ?: return
-        if (!restoring || !isResumed) return
+        if (!restoring || !isResumed || !model.hasLoaded) return
         val items = cards?.currentList.orEmpty()
+        // IO can finish before RecyclerView commits its first asynchronous diff.
+        if (items.map { it.tvItemKey } != model.items.value.orEmpty().map { it.tvItemKey }) return
         val index = resolveTvFocusIndex(items.map { it.tvItemKey }, anchor)
         if (index == null) { restoring = false; ui.nexoTvFavoritesDownloaded.requestFocus(); return }
         val card = ui.nexoTvFavoritesGrid.findViewHolderForAdapterPosition(index)?.itemView

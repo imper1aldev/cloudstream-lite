@@ -30,6 +30,7 @@ class NexoTvFavoritesViewModel : ViewModel() {
     var query = ""; private set
     var onlyDownloaded = false; private set
     var sorting = ListSorting.entries.getOrNull(DataStoreHelper.librarySortingMode) ?: ListSorting.UpdatedNew; private set
+    var hasLoaded = false; private set
     private var context: Context? = null
     private var job: Job? = null
     private val library: (Boolean) -> Unit = { refresh() }
@@ -64,6 +65,7 @@ class NexoTvFavoritesViewModel : ViewModel() {
                     favorites to entries
                 }
                 if (account != DataStoreHelper.currentAccount) { refresh(); return@launch }
+                hasLoaded = true
                 all = data.first
                 downloaded = data.second.filterValues { entries -> entries.any { (_, file) -> file.fileLength > 1024 && file.fileLength + 1024 >= file.totalBytes } }.keys.filterNotNull().toSet()
                 statuses = data.second.values.flatten().associate { (episode, file) -> episode.id to

@@ -44,3 +44,21 @@ fun bindNexoTvRail(activity: MainActivity, entryViewId: Int): () -> Unit {
         }
     }
 }
+
+/** Only the borders between zones override the existing grid's native arrow navigation. */
+internal fun bindNexoTvGridEdges(card: View, grid: androidx.recyclerview.widget.RecyclerView, above: View, menu: View?, below: () -> View? = { null }) {
+    card.setOnKeyListener { _, key, event ->
+        if (event.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+        val manager = grid.layoutManager as? androidx.recyclerview.widget.GridLayoutManager ?: return@setOnKeyListener false
+        val position = grid.getChildAdapterPosition(card)
+        if (position < 0) return@setOnKeyListener false
+        val menuKey = if (grid.layoutDirection == View.LAYOUT_DIRECTION_RTL) android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
+        val target = when {
+            key == menuKey && position % manager.spanCount == 0 -> menu
+            key == android.view.KeyEvent.KEYCODE_DPAD_UP && position < manager.spanCount -> above
+            key == android.view.KeyEvent.KEYCODE_DPAD_DOWN && position + manager.spanCount >= (grid.adapter?.itemCount ?: 0) -> below()
+            else -> null
+        }
+        target?.takeIf { it.isShown && it.isFocusable && it.isEnabled }?.requestFocus() == true
+    }
+}

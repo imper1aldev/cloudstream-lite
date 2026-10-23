@@ -65,6 +65,7 @@ class NexoTvSearchFragment : Fragment(R.layout.nexo_tv_search) {
             loadResult(item.url, item.apiName, item.name)
         }, { false }, { item, card ->
             if (!returning) anchor = TvFocusAnchor("search", item.tvItemKey, cards?.currentList?.indexOf(item) ?: 0)
+            bindNexoTvGridEdges(card, ui.nexoTvSearchGrid, ui.nexoTvSearchInput, activity?.findViewById(R.id.navigation_search)) { ui.nexoTvSearchRetry.takeIf { it.isShown } }
             bindRail(card.id)
         })
         cards = adapter

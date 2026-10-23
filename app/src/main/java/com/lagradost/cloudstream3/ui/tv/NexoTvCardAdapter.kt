@@ -50,6 +50,7 @@ class NexoTvCardAdapter(
         holder.image.dispose()
         holder.image.setImageDrawable(null)
         holder.itemView.setOnFocusChangeListener(null)
+        holder.itemView.setOnKeyListener(null)
         super.onViewRecycled(holder)
     }
     class Card(view: View) : RecyclerView.ViewHolder(view) {
