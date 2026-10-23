@@ -140,7 +140,7 @@ class NexoTvHomeTest {
                 scenario.onActivity { row.findViewHolderForAdapterPosition(23)!!.itemView.requestFocus() }
                 await("Third page failed or stole focus") { a -> (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.currentPage == 3 && row.adapter?.itemCount == 36 && a.currentFocus?.tag == key23 }
                 press(KeyEvent.KEYCODE_DPAD_CENTER)
-                await("Details did not open selected item") { nav(it).navController.currentDestination?.id == R.id.navigation_results_tv && it.findViewById<android.widget.TextView>(R.id.result_title)?.text?.toString() == "Home 23" }
+                await("Details did not open selected item") { nav(it).navController.currentDestination?.id == R.id.navigation_results_tv && it.findViewById<android.widget.TextView>(context.resources.getIdentifier("nexo_tv_result_title", "id", context.packageName))?.text?.toString() == "Home 23" }
                 press(KeyEvent.KEYCODE_BACK)
                 await("Home identity not restored") { it.currentFocus?.tag == key23 }
                 scenario.recreate()
@@ -186,4 +186,3 @@ class NexoTvHomeTest {
     }
     private fun androidx.fragment.app.Fragment.dialogViewWidth(): Int? = (this as? androidx.fragment.app.DialogFragment)?.dialog?.window?.decorView?.width
 }
-
