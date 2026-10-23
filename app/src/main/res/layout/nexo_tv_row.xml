@@ -1,0 +1,12 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+    android:paddingTop="22dp" android:paddingBottom="10dp" android:clipChildren="false">
+    <TextView android:id="@+id/nexo_tv_row_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginStart="16dp" android:padding="8dp" android:layout_marginBottom="8dp"
+        android:background="@drawable/nexo_tv_text_focus" android:textColor="#F5F7FA" android:textSize="22sp" android:textStyle="bold" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_row_list"
+        android:layout_width="match_parent" android:layout_height="252dp" android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp" android:clipToPadding="false" android:clipChildren="false" />
+    <Button android:id="@+id/nexo_tv_row_retry" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginStart="24dp" android:text="@string/retry" android:visibility="gone" />
+</LinearLayout>
