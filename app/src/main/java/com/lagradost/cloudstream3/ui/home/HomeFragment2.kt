@@ -39,11 +39,13 @@ class HomeFragment2 : BaseComposeFragment(), Screen by HomeScreen {
         }
 
         // TV/emulator: proxy the legacy fragment. A stable container id lets the
-        // child fragment state survive configuration changes (won't re-add then).
+        // child fragment state survive recreation and return from the back stack.
         val host = FrameLayout(inflater.context).apply {
             id = R.id.home_lite_legacy_host
         }
-        if (savedInstanceState == null) {
+        // A back-stack return can recreate the view with no savedInstanceState.
+        // Keep the child that FragmentManager already owns, including its focus state.
+        if (childFragmentManager.findFragmentById(R.id.home_lite_legacy_host) == null) {
             childFragmentManager.beginTransaction()
                 .replace(R.id.home_lite_legacy_host, HomeFragment())
                 .commit()
