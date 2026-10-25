@@ -23,20 +23,14 @@ class LiteHomeSectionTest {
         override suspend fun load(url: String) = newMovieLoadResponse("Section fixture",url,TvType.Movie,"fixture")
     }
     @Test fun expandedSectionUsesWindowWidthAndKeepsPagination() {
-        val instrumentation=InstrumentationRegistry.getInstrumentation()
-        val context=instrumentation.targetContext
-        val prefs=PreferenceManager.getDefaultSharedPreferences(context)
-        val key=context.getString(R.string.app_layout_key);val previous=prefs.all[key]
-        val oldProviders=APIHolder.allProviders.withLock { APIHolder.allProviders.toList() };val oldApis=APIHolder.apis
         val provider=Provider()
-        APIHolder.allProviders.withLock { APIHolder.allProviders.clear();APIHolder.allProviders.add(provider) }
-        APIHolder.apis=com.lagradost.cloudstream3.utils.AtomicList<MainAPI>(listOf(provider));APIHolder.apiMap=null
-        prefs.edit().putInt(key,0).commit();context.updateTv()
+        com.lagradost.cloudstream3.tv.NexoTvTestEnvironment(provider,layout=0).use { fixture ->
+        val instrumentation=fixture.instrumentation
+        val context=fixture.context
         fun tree(): List<android.view.accessibility.AccessibilityNodeInfo> {
             if(android.os.Build.VERSION.SDK_INT>=33)instrumentation.uiAutomation.clearCache()
             return LiteUiAutomation.nodes(instrumentation.uiAutomation.rootInActiveWindow).filter { it.isVisibleToUser }
         }
-        try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val deadline=System.currentTimeMillis()+15_000
                 while(tree().none { it.text?.toString()=="Wide section" } && System.currentTimeMillis()<deadline) {
@@ -58,10 +52,6 @@ class LiteHomeSectionTest {
                 LiteUiAutomation.waitFor { provider.pages.any { it>=2 } }
                 scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             }
-        } finally {
-            APIHolder.allProviders.withLock { APIHolder.allProviders.clear();APIHolder.allProviders.addAll(oldProviders) }
-            APIHolder.apis=oldApis;APIHolder.apiMap=null
-            val edit=prefs.edit();if(previous is Int)edit.putInt(key,previous)else edit.remove(key);edit.commit();context.updateTv()
         }
     }
 }

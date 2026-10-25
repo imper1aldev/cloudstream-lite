@@ -170,5 +170,3 @@ class NexoTvProbeFragment : Fragment() {
     }
     private class Card(view: View) : RecyclerView.ViewHolder(view)
 }
-
-

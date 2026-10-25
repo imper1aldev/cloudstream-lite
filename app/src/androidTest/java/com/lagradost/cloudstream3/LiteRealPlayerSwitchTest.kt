@@ -15,7 +15,7 @@ import kotlin.concurrent.thread
 
 /** Local PCM media exercises the actual CS3IPlayer/Media3 lifecycle, not an IPlayer proxy. */
 class LiteRealPlayerSwitchTest {
-    private class MediaServer : AutoCloseable {
+    internal class MediaServer : AutoCloseable {
         val socket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
         val clients = CopyOnWriteArrayList<Socket>()
         val stop = CountDownLatch(1)

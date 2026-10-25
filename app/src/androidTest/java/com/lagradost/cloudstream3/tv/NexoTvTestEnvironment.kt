@@ -13,7 +13,7 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper
 import org.junit.Assert.fail
 
 /** Temporary profile and provider only; never clear data or touch stable app packages. */
-internal class NexoTvTestEnvironment(private val provider: MainAPI? = null) : AutoCloseable {
+internal class NexoTvTestEnvironment(private val provider: MainAPI? = null, layout: Int = 1) : AutoCloseable {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val context = instrumentation.targetContext
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
@@ -40,7 +40,7 @@ internal class NexoTvTestEnvironment(private val provider: MainAPI? = null) : Au
         }
         DataStoreHelper.accounts = oldAccounts + DataStoreHelper.Account(profile,"TV test",defaultImageIndex=0)
         DataStoreHelper.selectedKeyIndex = profile
-        prefs.edit().putInt(layoutKey,1).commit(); context.updateTv()
+        prefs.edit().putInt(layoutKey,layout).commit(); context.updateTv()
         register()
     }
     fun register() {

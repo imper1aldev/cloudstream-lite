@@ -64,6 +64,27 @@ class NexoTvFavoritesTest {
                 env.await(scenario,"Undo did not restore favorite") { DataStoreHelper.getFavoritesData(parent)!=null }
                 SystemClock.sleep(LiteFavorites.GRACE_MS+500)
                 assertTrue("Undo did not protect local file",file.exists())
+                // A shared file must also survive when another profile still has the favorite.
+                val accounts=DataStoreHelper.accounts
+                val selected=DataStoreHelper.selectedKeyIndex
+                val other=generateSequence(-7868700) { it-1 }.first { id -> accounts.none { it.keyIndex==id } && CloudStreamApp.getKeys(id.toString()).isNullOrEmpty() }
+                try {
+                    DataStoreHelper.removeFavoritesData(parent)
+                    DataStoreHelper.accounts=accounts+DataStoreHelper.Account(other,"TV other profile",defaultImageIndex=0)
+                    DataStoreHelper.selectedKeyIndex=other
+                    DataStoreHelper.setFavoritesData(parent,favorite)
+                    DataStoreHelper.selectedKeyIndex=selected
+                    MainActivity.reloadAccountEvent(true)
+                    SystemClock.sleep(LiteFavorites.GRACE_MS+500)
+                    assertTrue("Another profile favorite did not protect shared local file",file.exists())
+                    DataStoreHelper.setFavoritesData(parent,favorite)
+                } finally {
+                    DataStoreHelper.selectedKeyIndex=selected
+                    CloudStreamApp.removeKeys(other.toString())
+                    DataStoreHelper.accounts=accounts
+                    MainActivity.reloadAccountEvent(true)
+                }
+                env.await(scenario,"Profile return did not restore both favorites") { it.findViewById<RecyclerView>(env.id("nexo_tv_favorites_grid"))?.adapter?.itemCount==2 }
                 scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_favorites_downloaded")).performClick() }
                 env.await(scenario,"Downloaded filter incorrect") { it.findViewById<RecyclerView>(env.id("nexo_tv_favorites_grid"))?.adapter?.itemCount==1 }
                 scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_favorites_options")).performClick() }

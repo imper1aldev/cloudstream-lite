@@ -19,7 +19,7 @@ import com.lagradost.cloudstream3.utils.AtomicList
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Debug-only integration probe: real MainActivity/remote/legacy Details, no media hosts. */
+/** Debug-only integration probe: real MainActivity/remote/current Details, no media hosts. */
 class NexoTvProbeTest {
     private class Provider : MainAPI() {
         override var name = "NexoStream"
@@ -165,9 +165,9 @@ class NexoTvProbeTest {
                     select(1, 7)
                     val before = settledCard(1, 7)
                     key(if (cycle % 2 == 0) KeyEvent.KEYCODE_DPAD_CENTER else KeyEvent.KEYCODE_ENTER)
-                    await("Legacy TV Details did not load the selected identity, cycle $cycle") { activity ->
+                    await("TV Details did not load the selected identity, cycle $cycle") { activity ->
                         nav(activity).navController.currentDestination?.id == R.id.navigation_results_tv &&
-                            activity.findViewById<TextView>(R.id.result_title)?.text?.toString() == "TV probe 1/7"
+                            activity.findViewById<TextView>(R.id.nexo_tv_result_title)?.text?.toString() == "TV probe 1/7"
                     }
                     key(KeyEvent.KEYCODE_BACK); awaitCard(1, 7)
                     assertEquals("Details return changed card geometry/scroll, cycle $cycle", before, settledCard(1, 7))
@@ -192,4 +192,3 @@ class NexoTvProbeTest {
         }
     }
 }
-

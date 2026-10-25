@@ -37,7 +37,7 @@ class LiteProgressivePlaybackTest {
         }
     }
     internal data class Load(val name: String?, val sameEpisode: Boolean)
-    internal class Fixture(layout: Int = 0, realPlayer: Boolean = false) : AutoCloseable {
+    internal class Fixture(layout: Int = InstrumentationRegistry.getArguments().getString("nexo_tv_layout")?.toIntOrNull() ?: 0, realPlayer: Boolean = false) : AutoCloseable {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
