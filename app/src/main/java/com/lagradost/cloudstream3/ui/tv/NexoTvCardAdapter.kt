@@ -34,18 +34,21 @@ class NexoTvCardAdapter(
             contentDescription = item.name
             scaleX = if (hasFocus()) 1.04f else 1f
             scaleY = scaleX
-            setOnClickListener { clicked(item) }
-            setOnLongClickListener { longClicked(item) }
+            setOnClickListener { currentItem(holder)?.let(clicked) }
+            setOnLongClickListener { currentItem(holder)?.let(longClicked) ?: false }
             setOnFocusChangeListener { view, hasFocus ->
                 view.scaleX = if (hasFocus) 1.04f else 1f
                 view.scaleY = view.scaleX
-                if (hasFocus) focused(item, view)
+                if (hasFocus) currentItem(holder)?.let { focused(it, view) }
             }
         }
         holder.title.text = item.name
         if (item.posterUrl.isNullOrBlank()) holder.image.loadImage(R.drawable.default_cover)
         else holder.image.loadImage(item.posterUrl, item.posterHeaders) { error { getImageFromDrawable(holder.itemView.context, R.drawable.default_cover) } }
     }
+    private fun currentItem(holder: Card): SearchResponse? =
+        holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let { currentList.getOrNull(it) }
+
     override fun onViewRecycled(holder: Card) {
         holder.image.dispose()
         holder.image.setImageDrawable(null)
@@ -59,4 +62,3 @@ class NexoTvCardAdapter(
         val title: TextView = view.findViewById(R.id.nexo_tv_card_title)
     }
 }
-

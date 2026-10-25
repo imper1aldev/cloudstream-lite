@@ -131,7 +131,8 @@ class NexoTvHomeTest {
                     (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.error == true &&
                         master.findViewHolderForAdapterPosition(1)?.itemView?.findViewById<View>(id("nexo_tv_row_retry"))?.visibility == View.VISIBLE
                 }
-                scenario.onActivity { master.findViewHolderForAdapterPosition(1)!!.itemView.findViewById<View>(id("nexo_tv_row_retry")).requestFocus() }
+                press(KeyEvent.KEYCODE_DPAD_DOWN)
+                await("Pagination retry cannot be reached with the remote") { it.currentFocus?.id == id("nexo_tv_row_retry") }
                 press(KeyEvent.KEYCODE_DPAD_CENTER)
                 await("Second page failed or stole focus") { a -> (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.currentPage == 2 && a.currentFocus?.tag == key11 }
                 scenario.onActivity { row.scrollToPosition(23) }

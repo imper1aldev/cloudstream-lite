@@ -61,6 +61,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     override fun onViewCreated(view: View, state: Bundle?) {
         val ui = NexoTvResultBinding.bind(view)
         binding = ui; pendingFocus = true
+        cancelNexoTvPendingFocus(ui.root, ui.nexoTvResultPlay, ui.nexoTvResultFavorite, ui.nexoTvResultMore, ui.nexoTvResultSeason, ui.nexoTvResultDub, ui.nexoTvResultRange, ui.nexoTvResultRetry) { pendingFocus = false }
         stored = getStoredData() ?: return
         ui.root.viewTreeObserver.addOnGlobalFocusChangeListener(focusListener)
         ui.nexoTvResultRetry.setOnClickListener { load(false) }

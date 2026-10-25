@@ -52,6 +52,7 @@ class NexoTvFavoritesFragment : Fragment(R.layout.nexo_tv_favorites) {
     override fun onViewCreated(view: View, state: Bundle?) {
         val ui = NexoTvFavoritesBinding.bind(view)
         binding = ui; restoring = true
+        cancelNexoTvPendingFocus(ui.root, ui.nexoTvFavoritesQuery, ui.nexoTvFavoritesDownloaded, ui.nexoTvFavoritesSort, ui.nexoTvFavoritesOptions) { restoring = false }
         val adapter = NexoTvCardAdapter(false, { item ->
             restoring = true; hideKeyboard()
             scroll = ui.nexoTvFavoritesGrid.layoutManager?.onSaveInstanceState()

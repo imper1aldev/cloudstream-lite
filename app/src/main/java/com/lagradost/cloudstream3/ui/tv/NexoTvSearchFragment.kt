@@ -58,6 +58,9 @@ class NexoTvSearchFragment : Fragment(R.layout.nexo_tv_search) {
     override fun onViewCreated(view: View, state: Bundle?) {
         val ui = NexoTvSearchBinding.bind(view)
         binding = ui
+        cancelNexoTvPendingFocus(ui.root, ui.nexoTvSearchInput, ui.nexoTvSearchBack, ui.nexoTvSearchRetry) {
+            returning = false; focusResults = false
+        }
         val adapter = NexoTvCardAdapter(false, { item ->
             returning = true
             scroll = ui.nexoTvSearchGrid.layoutManager?.onSaveInstanceState()

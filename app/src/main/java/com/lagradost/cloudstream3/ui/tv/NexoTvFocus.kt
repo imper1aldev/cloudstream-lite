@@ -62,3 +62,27 @@ internal fun bindNexoTvGridEdges(card: View, grid: androidx.recyclerview.widget.
         target?.takeIf { it.isShown && it.isFocusable && it.isEnabled }?.requestFocus() == true
     }
 }
+
+/** A delayed default/return focus must yield to subsequent remote navigation. */
+internal fun androidx.fragment.app.Fragment.cancelNexoTvPendingFocus(root: View, vararg controls: View, cancel: () -> Unit) {
+    fun View.inside(parent: View): Boolean = generateSequence(this) { it.parent as? View }.any { it === parent }
+    val listener = android.view.ViewTreeObserver.OnGlobalFocusChangeListener { old, next ->
+        val rail = activity?.findViewById<View>(R.id.nav_rail_view)
+        if (isResumed && old != null && next != null && old !== next && (
+                (rail != null && next.inside(rail) && (old.inside(root) || old.inside(rail))) ||
+                (controls.any { it === next } && old.inside(root)))) cancel()
+    }
+    root.viewTreeObserver.addOnGlobalFocusChangeListener(listener)
+    controls.forEach { control -> control.setOnKeyListener { _, key, event ->
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && key in listOf(
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT)) cancel()
+        false // Let native navigation carry out the move.
+    } }
+    viewLifecycleOwner.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+        override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+            if (root.viewTreeObserver.isAlive) root.viewTreeObserver.removeOnGlobalFocusChangeListener(listener)
+            controls.forEach { it.setOnKeyListener(null) }
+        }
+    })
+}

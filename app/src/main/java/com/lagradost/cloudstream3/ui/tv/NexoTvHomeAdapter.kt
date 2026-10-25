@@ -58,19 +58,20 @@ internal class NexoTvHomeAdapter(
     }
     fun saveScroll() { master?.let { list -> for (i in 0 until list.childCount) (list.getChildViewHolder(list.getChildAt(i)) as? Row)?.save() } }
 
-    fun restore(anchor: TvFocusAnchor?, completed: () -> Unit) {
+    fun restore(anchor: TvFocusAnchor?, allowed: () -> Boolean = { true }, completed: () -> Unit) {
         val list = master ?: return
-        if (currentList.isEmpty()) return
+        if (!allowed() || currentList.isEmpty()) return
         val position = currentList.indexOfFirst { it.key == anchor?.sectionKey }.coerceAtLeast(0)
         val holder = list.findViewHolderForAdapterPosition(position)
         if (holder == null) {
             list.scrollToPosition(position)
-            list.doOnNextLayout { if (master === list) restore(anchor, completed) }
+            list.doOnNextLayout { if (master === list) restore(anchor, allowed, completed) }
         } else when (holder) {
             is Hero -> { if (holder.itemView.requestFocus()) completed() }
             is Row -> {
-                if (anchor?.itemKey == "@title") { if (holder.title.requestFocus()) completed() }
-                else holder.focusItem(anchor ?: memory[getItem(position).key], completed)
+                if (anchor?.itemKey == "@retry" && holder.retry.isVisible) { if (holder.retry.requestFocus()) completed() }
+                else if (anchor?.itemKey == "@title") { if (holder.title.requestFocus()) completed() }
+                else holder.focusItem(anchor ?: memory[getItem(position).key], allowed, completed)
             }
         }
     }
@@ -100,7 +101,7 @@ internal class NexoTvHomeAdapter(
     private inner class Row(view: View) : RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.nexo_tv_row_title)
         val list: RecyclerView = view.findViewById(R.id.nexo_tv_row_list)
-        private val retry: View = view.findViewById(R.id.nexo_tv_row_retry)
+        val retry: View = view.findViewById(R.id.nexo_tv_row_retry)
         private var row: TvHomeRow? = null
         private var pendingScroll: String? = null
         private val cards: NexoTvCardAdapter = NexoTvCardAdapter(false, { item -> row?.let { clicked(it.key, item, list) } },
@@ -112,7 +113,7 @@ internal class NexoTvHomeAdapter(
                         if (event.action != KeyEvent.ACTION_DOWN) false
                         else when (code) {
                             KeyEvent.KEYCODE_DPAD_UP -> { if (title.isFocusable) title.requestFocus() else vertical(data.key, -1); true }
-                            KeyEvent.KEYCODE_DPAD_DOWN -> { vertical(data.key, 1); true }
+                            KeyEvent.KEYCODE_DPAD_DOWN -> { if (retry.isVisible) retry.requestFocus() else vertical(data.key, 1); true }
                             else -> false
                         }
                     }
@@ -145,6 +146,15 @@ internal class NexoTvHomeAdapter(
                     else -> false
                 }
             }
+            retry.setOnFocusChangeListener { v, has -> if (has) focused(TvFocusAnchor(data.key, "@retry", 0), v) }
+            retry.setOnKeyListener { _, code, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) false else when (code) {
+                    KeyEvent.KEYCODE_DPAD_UP -> { focusItem(memory[data.key]) {}; true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { vertical(data.key, 1); true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> itemView.rootView.findViewById<View>(R.id.navigation_home)?.requestFocus() == true
+                    else -> false
+                }
+            }
             retry.isVisible = data.error
             retry.setOnClickListener { focusItem(memory[data.key]) {}; loadMore(data.key) }
             if (list.adapter !== cards) list.adapter = cards
@@ -159,17 +169,16 @@ internal class NexoTvHomeAdapter(
         }
         fun release() { save(); list.adapter = null; row = null }
         fun save() { row?.key?.let { key -> list.layoutManager?.onSaveInstanceState()?.let { scroll[key] = it } } }
-        fun focusItem(anchor: TvFocusAnchor?, completed: () -> Unit) {
+        fun focusItem(anchor: TvFocusAnchor?, allowed: () -> Boolean = { true }, completed: () -> Unit) {
             val data = row ?: return
+            if (!allowed()) return
             if (cards.currentList.isEmpty() && data.items.isNotEmpty()) {
-                list.doOnNextLayout { if (row?.key == data.key) focusItem(anchor, completed) }; return
+                list.doOnNextLayout { if (row?.key == data.key) focusItem(anchor, allowed, completed) }; return
             }
             val index = resolveTvFocusIndex(cards.currentList.map { it.tvItemKey }, anchor) ?: run { if(title.requestFocus()) completed(); return }
             val target = list.findViewHolderForAdapterPosition(index)?.itemView
             if (target != null) { if(target.requestFocus()) completed() }
-            else { list.scrollToPosition(index); list.doOnNextLayout { if (row?.key == data.key) focusItem(anchor, completed) } }
+            else { list.scrollToPosition(index); list.doOnNextLayout { if (row?.key == data.key) focusItem(anchor, allowed, completed) } }
         }
     }
 }
-
-

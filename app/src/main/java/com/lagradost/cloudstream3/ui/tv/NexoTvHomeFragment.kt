@@ -70,6 +70,7 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         val ui = NexoTvHomeBinding.bind(view)
         binding = ui
         restoring = true; pendingRestore = true
+        cancelNexoTvPendingFocus(ui.root, ui.nexoTvHomeRetry) { restoring = false; pendingRestore = false }
         val adapter = NexoTvHomeAdapter(memory, rowScroll,
             { key, item, clicked ->
                 if (key != "@resume") restoring = true
@@ -183,7 +184,7 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
     private fun focused(saved: TvFocusAnchor, view: View) {
         if (restoring) { candidate = saved; return }
         anchor = saved
-        if (saved.itemKey != "@title") memory[saved.sectionKey] = saved
+        if (saved.itemKey !in listOf("@title", "@retry")) memory[saved.sectionKey] = saved
         bindEntry(view)
     }
     private fun bindEntry(view: View) {
@@ -198,9 +199,9 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         if (anchor == null && focus?.id in listOf(R.id.navigation_search, R.id.navigation_library, R.id.navigation_settings)) {
             pendingRestore = false; restoring = false; bindEntry(ui.nexoTvHomeList); return
         }
-        rows?.restore(anchor) {
+        rows?.restore(anchor, { pendingRestore }) {
             pendingRestore = false; restoring = false
-            candidate?.let { anchor = it; if (it.itemKey != "@title") memory[it.sectionKey] = it }
+            candidate?.let { anchor = it; if (it.itemKey !in listOf("@title", "@retry")) memory[it.sectionKey] = it }
             ui.root.findFocus()?.let(::bindEntry)
         }
     }

@@ -19,16 +19,52 @@ class NexoTvNavigationTest {
     private class Provider:MainAPI() {
         override var name="NexoStream"
         override var mainUrl="https://nexo-tv-nav-${System.nanoTime()}.invalid"
+        var searchGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        var loadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        val searchEntered = java.util.concurrent.atomic.AtomicBoolean()
+        val loadEntered = java.util.concurrent.atomic.AtomicBoolean()
         override val hasMainPage=true
         override val mainPage=mainPageOf("home" to "Navigation row")
         override val hasDownloadSupport=false
         override val hasChromecastSupport=false
         override suspend fun getMainPage(page:Int,request:MainPageRequest)=newHomePageResponse(request.name,(0..35).map { newMovieSearchResponse("Home $it","$mainUrl/$it",TvType.Movie) },false)
-        override suspend fun search(query:String,page:Int)=newSearchResponseList((0..27).map { newMovieSearchResponse("Search $it","$mainUrl/$it",TvType.Movie) },false)
-        override suspend fun load(url:String)=newMovieLoadResponse("Navigation details",url,TvType.Movie,"data") { plot="A local navigation fixture" }
+        override suspend fun search(query:String,page:Int): SearchResponseList { searchEntered.set(true); searchGate?.await(); return newSearchResponseList((0..27).map { newMovieSearchResponse("Search $it","$mainUrl/$it",TvType.Movie) },false) }
+        override suspend fun load(url:String): LoadResponse { if (url.endsWith("/slow")) { loadEntered.set(true); loadGate?.await() }; return newMovieLoadResponse("Navigation details",url,TvType.Movie,"data") { plot="A local navigation fixture" } }
     }
     private fun nav(a:MainActivity)=(a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).navController
     private fun homeReady(env:NexoTvTestEnvironment,scenario:ActivityScenario<MainActivity>)=env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+    @Test fun delayedDetailsDoesNotStealFocusFromMenu() {
+        val provider = Provider().apply { loadGate = kotlinx.coroutines.CompletableDeferred() }
+        try { NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            homeReady(env,scenario)
+            scenario.onActivity { com.lagradost.cloudstream3.utils.AppContextUtils.run { it.loadResult("${provider.mainUrl}/slow", provider.name, "Delayed") } }
+            env.await(scenario,"Details load did not start") { provider.loadEntered.get() }
+            scenario.onActivity { it.findViewById<View>(R.id.navigation_home).requestFocus() }
+            env.key(KeyEvent.KEYCODE_DPAD_DOWN)
+            var selected = View.NO_ID
+            scenario.onActivity { selected = it.currentFocus!!.id }
+            provider.loadGate!!.complete(Unit)
+            env.await(scenario,"Delayed Details not rendered") { it.findViewById<TextView>(env.id("nexo_tv_result_title"))?.text=="Navigation details" }
+            SystemClock.sleep(500)
+            scenario.onActivity { assertEquals("Late Details stole menu focus", selected, it.currentFocus?.id) }
+        } } } finally { provider.loadGate!!.complete(Unit) }
+    }
+    @Test fun submittedSearchDoesNotStealFocusAfterRemoteMovesToBack() {
+        val provider = Provider().apply { searchGate = kotlinx.coroutines.CompletableDeferred() }
+        try { NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            homeReady(env,scenario)
+            scenario.onActivity { it.findViewById<NavigationRailView>(R.id.nav_rail_view).selectedItemId=R.id.navigation_search }
+            env.await(scenario,"Search missing") { it.findViewById<EditText>(env.id("nexo_tv_search_input"))!=null }
+            scenario.onActivity { a -> a.findViewById<EditText>(env.id("nexo_tv_search_input")).apply { setText("delayed"); requestFocus(); onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) } }
+            env.await(scenario,"Search not started") { provider.searchEntered.get() }
+            env.key(KeyEvent.KEYCODE_DPAD_LEFT)
+            env.await(scenario,"Back not reached") { it.currentFocus?.id==env.id("nexo_tv_search_back") }
+            provider.searchGate!!.complete(Unit)
+            env.await(scenario,"Results not rendered") { it.findViewById<RecyclerView>(env.id("nexo_tv_search_grid"))?.findViewHolderForAdapterPosition(0)!=null }
+            SystemClock.sleep(500)
+            scenario.onActivity { assertEquals("Late search stole Back focus", env.id("nexo_tv_search_back"), it.currentFocus?.id) }
+        } } } finally { provider.searchGate!!.complete(Unit) }
+    }
     @Test fun searchGridEdgesReachMenuAndInputWithoutActivatingDestinations() {
         NexoTvTestEnvironment(Provider()).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             homeReady(env,scenario)
