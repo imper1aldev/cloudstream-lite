@@ -33,6 +33,17 @@ class NexoTvNavigationTest {
     }
     private fun nav(a:MainActivity)=(a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).navController
     private fun homeReady(env:NexoTvTestEnvironment,scenario:ActivityScenario<MainActivity>)=env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+    @Test fun delayedDetailsWithoutNavigationStartsOnPlay() {
+        val provider = Provider().apply { loadGate = kotlinx.coroutines.CompletableDeferred() }
+        try { NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            homeReady(env,scenario)
+            scenario.onActivity { com.lagradost.cloudstream3.utils.AppContextUtils.run { it.loadResult("${provider.mainUrl}/slow", provider.name, "Delayed") } }
+            env.await(scenario,"Details load did not start") { provider.loadEntered.get() }
+            SystemClock.sleep(400)
+            provider.loadGate!!.complete(Unit)
+            env.await(scenario,"Unmoved initial Details focus did not reach Play") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+        } } } finally { provider.loadGate!!.complete(Unit) }
+    }
     @Test fun delayedDetailsDoesNotStealFocusFromMenu() {
         val provider = Provider().apply { loadGate = kotlinx.coroutines.CompletableDeferred() }
         try { NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
