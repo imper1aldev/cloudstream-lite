@@ -40,6 +40,10 @@ class NexoTvResultTest {
                     addEpisodes(DubStatus.Subbed,listOf(newEpisode("sub-1") { episode=1; name="Sub" }))
                     addEpisodes(DubStatus.Dubbed,listOf(newEpisode("dub-1") { episode=1; name="Dub" }))
                 }
+                "hero" -> newMovieLoadResponse("Vista de detalles",url,TvType.Movie,"movie-data") {
+                    year=2020;duration=148;tags=listOf("Accion","Ciencia ficcion","Drama")
+                    plot="Una historia de viajes, misterios y aventuras que pone a prueba a sus protagonistas. ".repeat(8)
+                }
                 "soon" -> newMovieLoadResponse("Soon fixture",url,TvType.Movie,"") { comingSoon=true }
                 else -> newMovieLoadResponse("Movie fixture",url,TvType.Movie,"movie-data") { plot="A short plot" }
             }
@@ -52,6 +56,63 @@ class NexoTvResultTest {
     private fun ownResultExists() {
         try { Class.forName("com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment") }
         catch(e: ClassNotFoundException) { throw AssertionError("Own TV Details missing",e) }
+    }
+    @Test fun initialPlayFocusKeepsNormalHeroTitleVisible() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/hero",provider.name,"Vista de detalles") }
+            env.await(scenario,"Initial Play focus missing") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            env.instrumentation.waitForIdleSync();SystemClock.sleep(600)
+            scenario.onActivity { a ->
+                val title=a.findViewById<View>(env.id("nexo_tv_result_title"));val rect=android.graphics.Rect()
+                assertTrue("Title scrolled outside viewport",title.getGlobalVisibleRect(rect))
+                assertEquals("Initial focus clipped the title",title.height,rect.height())
+                val play=a.findViewById<View>(env.id("nexo_tv_result_play"))
+                assertTrue(play.getGlobalVisibleRect(rect));assertEquals(play.height,rect.height())
+            }
+        } }
+    }
+    @Test fun favoriteIconAnnouncesAndPersistsToggle() {
+        NexoTvTestEnvironment(Provider()).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val provider=APIHolder.getApiFromNameNull("NexoStream")!!
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/movie",provider.name,"Movie fixture") }
+            env.await(scenario,"Details not ready") { it.findViewById<View>(env.id("nexo_tv_result_play"))?.isShown==true }
+            fun favorite(a:MainActivity)=a.findViewById<View>(env.id("nexo_tv_result_favorite"))
+            scenario.onActivity { a ->
+                assertEquals("Icon must announce the add action",a.getString(R.string.favorite),favorite(a).contentDescription)
+                assertFalse(favorite(a).isSelected)
+                favorite(a).requestFocus(); favorite(a).performClick()
+            }
+            env.await(scenario,"Favorite icon state not updated") { favorite(it).isSelected && favorite(it).contentDescription==it.getString(R.string.unfavorite) }
+            scenario.recreate()
+            env.await(scenario,"Favorite state/focus not restored") { favorite(it).isSelected && it.currentFocus?.id==favorite(it).id }
+            scenario.onActivity { favorite(it).performClick() }
+            env.await(scenario,"Unfavorite did not update accessible state") { !favorite(it).isSelected && favorite(it).contentDescription==it.getString(R.string.favorite) }
+        } }
+    }
+    @Test fun synopsisVisibilityTracksRelayoutWithoutReloadingMetadata() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/movie",provider.name,"Movie fixture") }
+            env.await(scenario,"Details not ready") { it.findViewById<View>(env.id("nexo_tv_result_play"))?.isShown==true }
+            scenario.onActivity { a ->
+                a.findViewById<TextView>(env.id("nexo_tv_result_plot")).apply {
+                    text="A traveller crosses the stars to find a new home, while the family left behind faces an uncertain future."
+                    layoutParams=layoutParams.apply { width=220 }
+                }
+            }
+            env.await(scenario,"Narrow synopsis cannot be expanded") { it.findViewById<View>(env.id("nexo_tv_result_more"))?.isShown==true }
+            scenario.onActivity { a ->
+                a.findViewById<View>(env.id("nexo_tv_result_more")).requestFocus()
+                a.findViewById<TextView>(env.id("nexo_tv_result_plot")).apply { layoutParams=layoutParams.apply { width=1200 } }
+            }
+            env.await(scenario,"Expansion action remained after text fits") { it.findViewById<View>(env.id("nexo_tv_result_more"))?.visibility==View.GONE }
+            env.await(scenario,"Hiding expansion lost valid focus") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            assertEquals(1,provider.loads.count { it.endsWith("/movie") })
+        } }
     }
     @Test fun movieSeriesAnimeAndHiddenActionsUseExistingModel() {
         ownResultExists()

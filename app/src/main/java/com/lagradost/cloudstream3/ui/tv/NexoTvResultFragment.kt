@@ -20,6 +20,7 @@ import com.lagradost.cloudstream3.ui.result.*
 import com.lagradost.cloudstream3.ui.result.ResultFragment.getStoredData
 import com.lagradost.cloudstream3.utils.AppContextUtils.loadResult
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
+import com.lagradost.cloudstream3.utils.UIHelper.populateChips
 
 /** Presentation only: original episode payloads, autostart and player actions remain in ResultViewModel2. */
 class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
@@ -64,6 +65,17 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         // Hiding Play during metadata loading can move focus to Favorite automatically.
         // Only leaving for the menu cancels this initial/return restoration.
         cancelNexoTvPendingFocus(ui.root) { pendingFocus = false }
+        // Truncation can change after text, width or font-scale updates without a new page.
+        ui.nexoTvResultPlot.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (binding === ui) {
+                val layout = ui.nexoTvResultPlot.layout
+                val truncated = layout != null && (0 until layout.lineCount).any { layout.getEllipsisCount(it) > 0 }
+                if (!truncated && ui.nexoTvResultMore.hasFocus()) {
+                    (ui.nexoTvResultPlay.takeIf { it.isShown } ?: ui.nexoTvResultFavorite).requestFocus()
+                }
+                ui.nexoTvResultMore.isVisible = truncated
+            }
+        }
         stored = getStoredData() ?: return
         ui.root.viewTreeObserver.addOnGlobalFocusChangeListener(focusListener)
         ui.nexoTvResultRetry.setOnClickListener { load(false) }
@@ -86,14 +98,14 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
                     comingSoon = data.comingSoon
                     ui.nexoTvResultStatus.isVisible = false
                     ui.nexoTvResultTitle.text = data.title
-                    ui.nexoTvResultMeta.text = listOfNotNull(data.yearText, data.typeText, data.durationText, data.ratingText, data.contentRatingText, data.onGoingText, data.nextAiringEpisode).joinToString("   ") { it.asString(requireContext()) }
+                    ui.nexoTvResultType.text = data.typeText.asString(requireContext())
+                    val metadata = listOfNotNull(data.yearText, data.durationText, data.ratingText, data.contentRatingText, data.onGoingText, data.nextAiringEpisode)
+                        .map { it.asString(requireContext()) }.filter { it.isNotBlank() }
+                    populateChips(ui.nexoTvResultMeta, metadata, R.style.NexoTvDetailsBadge)
+                    ui.nexoTvResultMeta.isVisible = metadata.isNotEmpty()
+                    populateChips(ui.nexoTvResultGenres, data.tags, R.style.NexoTvDetailsBadge)
+                    ui.nexoTvResultGenres.isVisible = data.tags.isNotEmpty()
                     ui.nexoTvResultPlot.text = data.plotText.asString(requireContext())
-                    ui.nexoTvResultPlot.post {
-                        if (binding === ui) {
-                            val layout = ui.nexoTvResultPlot.layout
-                            ui.nexoTvResultMore.isVisible = layout != null && (0 until layout.lineCount).any { layout.getEllipsisCount(it) > 0 }
-                        }
-                    }
                     ui.nexoTvResultMore.setOnClickListener {
                         selection?.dismiss()
                         selection = AlertDialog.Builder(requireContext()).setTitle(data.title).setMessage(data.plotText.asString(requireContext())).setPositiveButton(android.R.string.ok, null).show()
@@ -121,7 +133,9 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
             refreshPlay()
         }
         model.favoriteStatus.observe(viewLifecycleOwner) {
-            ui.nexoTvResultFavorite.text = getString(R.string.favorite) + if (it == true) " \u2665" else " \u2661"
+            ui.nexoTvResultFavorite.isSelected = it == true
+            ui.nexoTvResultFavorite.setImageResource(if (it == true) R.drawable.ic_baseline_favorite_24 else R.drawable.ic_baseline_favorite_border_24)
+            ui.nexoTvResultFavorite.contentDescription = getString(if (it == true) R.string.unfavorite else R.string.favorite)
             ui.nexoTvResultFavorite.isEnabled = it != null
         }
         model.seasonSelections.observe(viewLifecycleOwner) { values ->

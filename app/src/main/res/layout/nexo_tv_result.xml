@@ -1,31 +1,113 @@
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/nexo_tv_result_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#0E1014">
- <ImageView android:id="@+id/nexo_tv_result_backdrop" android:layout_width="match_parent" android:layout_height="280dp" android:scaleType="centerCrop" android:alpha="0.35" android:importantForAccessibility="no" />
- <View android:layout_width="match_parent" android:layout_height="280dp" android:background="@drawable/nexo_tv_hero_shade" />
- <androidx.core.widget.NestedScrollView android:id="@+id/nexo_tv_result_scroll" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:clipToPadding="false">
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="24dp">
-   <TextView android:id="@+id/nexo_tv_result_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="32sp" android:textStyle="bold" android:textColor="#FFFFFF" android:layout_marginTop="36dp" />
-   <TextView android:id="@+id/nexo_tv_result_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textSize="16sp" android:textColor="#D5D8E0" />
-   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="18dp">
-    <TextView android:id="@+id/nexo_tv_result_play" style="@style/NexoTvAction" android:text="@string/play_episode" />
-    <TextView android:id="@+id/nexo_tv_result_favorite" style="@style/NexoTvAction" android:text="@string/favorite" />
-    <TextView android:id="@+id/nexo_tv_result_cast" style="@style/NexoTvAction" android:text="Cast" android:visibility="gone" />
-    <TextView android:id="@+id/nexo_tv_result_download" style="@style/NexoTvAction" android:text="@string/download" android:visibility="gone" />
-   </LinearLayout>
-   <TextView android:id="@+id/nexo_tv_result_plot" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:textSize="17sp" android:textColor="#D5D8E0" android:maxLines="3" android:ellipsize="end" />
-   <TextView android:id="@+id/nexo_tv_result_more" style="@style/NexoTvAction" android:text="@string/synopsis" android:visibility="gone" />
-   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="20dp">
-    <TextView android:id="@+id/nexo_tv_result_season" style="@style/NexoTvAction" android:visibility="gone" />
-    <TextView android:id="@+id/nexo_tv_result_dub" style="@style/NexoTvAction" android:visibility="gone" />
-    <TextView android:id="@+id/nexo_tv_result_range" style="@style/NexoTvAction" android:visibility="gone" />
-   </LinearLayout>
-   <TextView android:id="@+id/nexo_tv_result_episode_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="18sp" android:textColor="#D5D8E0" android:layout_marginTop="12dp" />
-   <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_episodes" android:layout_width="match_parent" android:layout_height="228dp" android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
-   <TextView android:id="@+id/nexo_tv_result_recommendation_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/recommendations_tooltip" android:textSize="22sp" android:textStyle="bold" android:textColor="#FFFFFF" android:layout_marginTop="18dp" />
-   <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_recommendations" android:layout_width="match_parent" android:layout_height="252dp" android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
-  </LinearLayout>
- </androidx.core.widget.NestedScrollView>
- <LinearLayout android:id="@+id/nexo_tv_result_status" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#0E1014">
-  <TextView android:id="@+id/nexo_tv_result_message" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/loading" android:textSize="20sp" android:textColor="#FFFFFF" />
-  <TextView android:id="@+id/nexo_tv_result_retry" style="@style/NexoTvAction" android:text="@string/retry" android:visibility="gone" />
- </LinearLayout>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nexo_tv_result_root"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#0E1014">
+
+    <com.lagradost.cloudstream3.ui.tv.NexoTvDetailsScrollView
+        android:id="@+id/nexo_tv_result_scroll"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:fillViewport="true" android:clipToPadding="false">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingBottom="36dp">
+
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="410dp">
+                <ImageView android:id="@+id/nexo_tv_result_backdrop"
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:scaleType="centerCrop" android:importantForAccessibility="no" />
+                <View android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:background="@drawable/nexo_tv_details_shade" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:paddingStart="40dp" android:paddingEnd="32dp"
+                    android:paddingTop="40dp" android:paddingBottom="32dp">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintWidth_percent="0.66">
+                        <TextView android:id="@+id/nexo_tv_result_type"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:textSize="14sp" android:textStyle="bold" android:textAllCaps="true"
+                            android:letterSpacing="0.12" android:textColor="#AFBFE3" />
+                        <TextView android:id="@+id/nexo_tv_result_title"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp" android:textSize="36sp" android:textStyle="bold"
+                            android:fontFamily="sans-serif-black" android:textColor="#FFFFFF" />
+                        <com.google.android.material.chip.ChipGroup android:id="@+id/nexo_tv_result_meta"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp" app:chipSpacingHorizontal="8dp" app:chipSpacingVertical="4dp" />
+                        <com.google.android.material.chip.ChipGroup android:id="@+id/nexo_tv_result_genres"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp" app:chipSpacingHorizontal="8dp" app:chipSpacingVertical="4dp"
+                            android:visibility="gone" />
+                        <TextView android:id="@+id/nexo_tv_result_plot"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp" android:textSize="17sp" android:lineSpacingExtra="3dp"
+                            android:textColor="#D5DCE8" android:maxLines="3" android:ellipsize="end" />
+                        <TextView android:id="@+id/nexo_tv_result_more"
+                            style="@style/NexoTvDetailsAction" android:layout_height="44dp"
+                            android:layout_marginTop="8dp" android:minHeight="44dp"
+                            android:background="@drawable/nexo_tv_details_secondary"
+                            android:text="@string/lite_more" android:textSize="14sp" android:visibility="gone" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:orientation="horizontal" android:gravity="center_vertical"
+                            android:layout_marginTop="20dp" android:clipChildren="false">
+                            <TextView android:id="@+id/nexo_tv_result_play" style="@style/NexoTvDetailsAction"
+                                android:minWidth="160dp" android:drawableStart="@drawable/ic_baseline_play_arrow_24"
+                                android:drawableTint="@color/nexo_tv_details_action_tint" android:drawablePadding="10dp"
+                                android:text="@string/play_episode" />
+                            <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/nexo_tv_result_favorite"
+                                android:layout_width="52dp" android:layout_height="52dp" android:layout_marginStart="12dp"
+                                android:padding="14dp" android:scaleType="fitCenter"
+                                android:background="@drawable/nexo_tv_details_secondary"
+                                android:focusable="true" android:clickable="true"
+                                android:contentDescription="@string/favorite"
+                                app:srcCompat="@drawable/ic_baseline_favorite_border_24"
+                                app:tint="@color/nexo_tv_details_action_tint" />
+                            <!-- Secondary actions remain hidden until their phase connects real callbacks. -->
+                            <TextView android:id="@+id/nexo_tv_result_cast" style="@style/NexoTvAction"
+                                android:text="@string/lite_cast_action" android:visibility="gone" />
+                            <TextView android:id="@+id/nexo_tv_result_download" style="@style/NexoTvAction"
+                                android:text="@string/download" android:visibility="gone" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </FrameLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:paddingStart="40dp" android:paddingEnd="32dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginTop="16dp">
+                    <TextView android:id="@+id/nexo_tv_result_season" style="@style/NexoTvAction" android:visibility="gone" />
+                    <TextView android:id="@+id/nexo_tv_result_dub" style="@style/NexoTvAction" android:visibility="gone" />
+                    <TextView android:id="@+id/nexo_tv_result_range" style="@style/NexoTvAction" android:visibility="gone" />
+                </LinearLayout>
+                <TextView android:id="@+id/nexo_tv_result_episode_status"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textSize="22sp" android:textStyle="bold" android:textColor="#FFFFFF" android:layout_marginTop="12dp" />
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_episodes"
+                    android:layout_width="match_parent" android:layout_height="228dp" android:layout_marginTop="12dp"
+                    android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
+                <TextView android:id="@+id/nexo_tv_result_recommendation_title"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="@string/recommendations_tooltip" android:textSize="22sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_marginTop="28dp" />
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_recommendations"
+                    android:layout_width="match_parent" android:layout_height="252dp" android:layout_marginTop="12dp"
+                    android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.lagradost.cloudstream3.ui.tv.NexoTvDetailsScrollView>
+
+    <LinearLayout android:id="@+id/nexo_tv_result_status"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:gravity="center" android:background="#0E1014">
+        <TextView android:id="@+id/nexo_tv_result_message"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/loading" android:textSize="20sp" android:textColor="#FFFFFF" />
+        <TextView android:id="@+id/nexo_tv_result_retry" style="@style/NexoTvAction"
+            android:text="@string/retry" android:visibility="gone" />
+    </LinearLayout>
 </FrameLayout>
