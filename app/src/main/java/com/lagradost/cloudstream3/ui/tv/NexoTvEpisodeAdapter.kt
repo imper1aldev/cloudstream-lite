@@ -6,12 +6,16 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
+import com.lagradost.cloudstream3.ui.result.VideoWatchState
+import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.secondsToReadable
+import com.lagradost.cloudstream3.utils.AppContextUtils.getShortSeasonText
 import com.lagradost.cloudstream3.ui.result.getDisplayPosition
 import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
@@ -37,9 +41,18 @@ class NexoTvEpisodeAdapter(
             setOnLongClickListener { longClicked(ep); true }
             setOnFocusChangeListener { v, has -> if (has) focused(ep, v) }
         }
-        holder.title.text = holder.itemView.context.getNameFull(ep.name, ep.episode, ep.season)
+        val context = holder.itemView.context
+        holder.number.text = context.getShortSeasonText(ep.episode, ep.season)
+        holder.title.text = ep.name?.takeIf { it.isNotBlank() } ?: context.getNameFull(null, ep.episode, ep.season)
         holder.description.text = ep.description
-        holder.progress.progress = if (ep.duration > 0) (ep.getDisplayPosition() * 100 / ep.duration).toInt() else 0
+        holder.description.isVisible = !ep.description.isNullOrBlank()
+        val progress = if (ep.duration > 0) (ep.getDisplayPosition() * 100 / ep.duration).toInt().coerceIn(0, 100) else 0
+        val watched = ep.videoWatchState == VideoWatchState.Watched || progress == 100
+        holder.watched.isVisible = watched
+        holder.progress.progress = if (watched) 100 else progress
+        holder.progress.isVisible = watched || progress > 0
+        holder.runtime.text = ep.runTime?.takeIf { it > 0 }?.let { secondsToReadable(it, "") }
+        holder.runtime.isVisible = !holder.runtime.text.isNullOrBlank()
         if (ep.poster.isNullOrBlank()) holder.image.loadImage(R.drawable.default_cover)
         else holder.image.loadImage(ep.poster) { error { getImageFromDrawable(holder.itemView.context, R.drawable.default_cover) } }
     }
@@ -50,5 +63,8 @@ class NexoTvEpisodeAdapter(
         val title: TextView = view.findViewById(R.id.nexo_tv_episode_title)
         val description: TextView = view.findViewById(R.id.nexo_tv_episode_description)
         val progress: ProgressBar = view.findViewById(R.id.nexo_tv_episode_progress)
+        val number: TextView = view.findViewById(R.id.nexo_tv_episode_number)
+        val runtime: TextView = view.findViewById(R.id.nexo_tv_episode_runtime)
+        val watched: ImageView = view.findViewById(R.id.nexo_tv_episode_watched)
     }
 }

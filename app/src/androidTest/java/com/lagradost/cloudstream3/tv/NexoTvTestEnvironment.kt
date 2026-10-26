@@ -30,6 +30,8 @@ internal class NexoTvTestEnvironment(private val provider: MainAPI? = null, layo
     private val oldSelected = DataStoreHelper.selectedKeyIndex
     private val profile = generateSequence(-7754000) { it-1 }.first { id -> oldAccounts.none { it.keyIndex == id } && CloudStreamApp.getKeys(id.toString()).isNullOrEmpty() }
     init {
+        // ADB profile-management taps can leave the TV in touch mode, where requestFocus is rejected.
+        instrumentation.setInTouchMode(false)
         android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("input keyevent 224")).use { it.readBytes() }
         if(provider != null) {
             store.edit().remove("PLUGINS_KEY").remove("PLUGINS_KEY_LOCAL").commit()

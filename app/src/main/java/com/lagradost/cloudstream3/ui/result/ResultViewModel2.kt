@@ -1947,7 +1947,7 @@ class ResultViewModel2 : ViewModel() {
                         getEpisodes(
                             currentIndex ?: return,
                             currentRange ?: return,
-                        ), currentSorting ?: return
+                        ), currentSorting ?: DataStoreHelper.resultsSortingMode
                     )
                 )
             )

@@ -21,6 +21,8 @@ import com.lagradost.cloudstream3.ui.player.NEXT_WATCH_EPISODE_PERCENTAGE
 import com.lagradost.cloudstream3.ui.result.*
 import com.lagradost.cloudstream3.ui.result.ResultFragment.getStoredData
 import com.lagradost.cloudstream3.utils.AppContextUtils.loadResult
+import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
+import java.text.NumberFormat
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
 
@@ -38,6 +40,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     private var focusKey: String? = null
     private var focusArea = "action"
     private var focusIndex = 0
+    private var playbackOrigin: TvFocusAnchor? = null
     private var pendingFocus = true
     private var comingSoon = false
     private var stored: ResultFragment.StoredData? = null
@@ -46,7 +49,8 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     private val plugins: (Boolean) -> Unit = { if (!model.hasLoaded()) load(false) }
     private val focusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, next ->
         val root = binding?.root
-        if (!pendingFocus && next != null && root?.findViewById<View>(next.id) === next) {
+        if (!pendingFocus && isResumed && parentFragmentManager.primaryNavigationFragment === this &&
+            next != null && root?.findViewById<View>(next.id) === next) {
             if (next.tag is String) {
                 focusKey = next.tag as String
                 focusArea = if (episodes?.currentList?.any { it.tvEpisodeKey == focusKey } == true) "episode" else "recommendation"
@@ -86,8 +90,8 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         ui.nexoTvResultRetry.setOnClickListener { load(false) }
         ui.nexoTvResultFavorite.setOnClickListener { model.toggleFavoriteStatus(context) }
         episodes = NexoTvEpisodeAdapter(
-            { model.handleAction(EpisodeClickEvent(ACTION_CLICK_DEFAULT, it)) },
-            { model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, it)) },
+            { rememberPlaybackOrigin(it); model.handleAction(EpisodeClickEvent(ACTION_CLICK_DEFAULT, it)) },
+            { rememberPlaybackOrigin(it); model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, it)) },
             { ep, _ -> focusIndex = episodes?.currentList?.indexOf(ep) ?: 0 })
         ui.nexoTvResultEpisodes.setLinearListLayout(nextLeft = R.id.nav_rail_view, nextRight = FOCUS_SELF)
         ui.nexoTvResultEpisodes.adapter = episodes
@@ -139,8 +143,6 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         model.episodes.observe(viewLifecycleOwner) { resource ->
             if (resource is Resource.Success) {
                 episodes?.submitList(resource.value) { restoreFocus() }
-                ui.nexoTvResultEpisodes.isVisible = resource.value.isNotEmpty() && !comingSoon
-                ui.nexoTvResultEpisodeStatus.text = if (resource.value.isEmpty()) model.page.value.let { (it as? Resource.Success)?.value?.noEpisodesFoundText?.asString(requireContext()) } else getString(R.string.episodes)
             }
             refreshPlay()
         }
@@ -208,19 +210,46 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         val last = eps.indexOfLast { it.getWatchProgress() >= NEXT_WATCH_EPISODE_PERCENTAGE / 100.0f || it.videoWatchState == VideoWatchState.Watched }
         val resume = model.resumeWatching.value
         val target = resume?.result ?: movie ?: eps.getOrElse(last + 1) { eps.firstOrNull() }
+        ui.nexoTvResultResume.isVisible = resume != null && !comingSoon
+        if (resume != null) {
+            ui.nexoTvResultResumeTitle.text = if (resume.isMovie) (model.page.value as? Resource.Success)?.value?.title
+                else requireContext().getNameFull(resume.result.name, resume.result.episode, resume.result.season)
+            val progress = resume.progress
+            val fraction = progress?.takeIf { it.maxProgress > 0 }?.let { (it.progress.toDouble() / it.maxProgress).coerceIn(0.0, 1.0) }
+            ui.nexoTvResultResumeProgressRow.isVisible = fraction != null
+            ui.nexoTvResultResumeRemaining.isVisible = fraction != null
+            ui.nexoTvResultResumeProgress.progress = ((fraction ?: 0.0) * 100).toInt()
+            ui.nexoTvResultResumePercent.text = fraction?.let { NumberFormat.getPercentInstance().format(it) }
+            ui.nexoTvResultResumeRemaining.text = progress?.progressLeft?.asString(requireContext())?.replace('\n', ' ')
+        }
+        val hasEpisodes = eps.isNotEmpty() && !comingSoon
+        ui.nexoTvResultEpisodes.isVisible = hasEpisodes
+        val episodeStatus = if (hasEpisodes) getString(R.string.episodes) else if (!comingSoon)
+            (model.page.value as? Resource.Success)?.value?.noEpisodesFoundText?.asString(requireContext()) else null
+        ui.nexoTvResultEpisodeStatus.text = episodeStatus
+        ui.nexoTvResultEpisodeStatus.isVisible = !episodeStatus.isNullOrBlank()
+        refreshEpisodeControls()
         ui.nexoTvResultPlay.isVisible = !comingSoon && target != null
         ui.nexoTvResultPlay.text = getString(if (resume != null) R.string.resume else R.string.lite_play)
-        ui.nexoTvResultPlay.setOnClickListener { target?.let { model.handleAction(EpisodeClickEvent(if (resume != null) stored?.playerAction ?: ACTION_CLICK_DEFAULT else ACTION_CLICK_DEFAULT, it)) } }
-        ui.nexoTvResultPlay.setOnLongClickListener { target?.let { model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, it)) }; true }
+        ui.nexoTvResultPlay.setOnClickListener { playbackOrigin = null; target?.let { model.handleAction(EpisodeClickEvent(if (resume != null) stored?.playerAction ?: ACTION_CLICK_DEFAULT else ACTION_CLICK_DEFAULT, it)) } }
+        ui.nexoTvResultPlay.setOnLongClickListener { playbackOrigin = null; target?.let { model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, it)) }; true }
         restoreFocus()
+    }
+    private fun rememberPlaybackOrigin(episode: ResultEpisode) {
+        playbackOrigin = TvFocusAnchor("episode", episode.tvEpisodeKey, episodes?.currentList?.indexOf(episode)?.coerceAtLeast(0) ?: 0)
     }
     private fun selector(view: TextView, labels: List<String>, selected: Int, changed: (Int) -> Unit) {
         view.isVisible = labels.size > 1
         view.text = labels.getOrNull(selected)
+        refreshEpisodeControls()
         view.setOnClickListener {
             selection?.dismiss()
             selection = AlertDialog.Builder(requireContext()).setTitle(view.text).setSingleChoiceItems(labels.toTypedArray(), labels.indexOf(view.text.toString()).coerceAtLeast(0)) { dialog, index -> changed(index); dialog.dismiss() }.show()
         }
+    }
+    private fun refreshEpisodeControls() {
+        val ui = binding ?: return
+        ui.nexoTvResultEpisodeControls.isVisible = !comingSoon && listOf(ui.nexoTvResultSeason, ui.nexoTvResultDub, ui.nexoTvResultRange).any { it.isVisible }
     }
     private fun refreshSelectionLabels() {
         val ui = binding ?: return
@@ -237,22 +266,41 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
             if (focusArea != "action") {
                 val list = if (focusArea == "episode") ui.nexoTvResultEpisodes else ui.nexoTvResultRecommendations
                 val keys = if (focusArea == "episode") episodes?.currentList?.map { it.tvEpisodeKey }.orEmpty() else recommendations?.currentList?.map { it.tvItemKey }.orEmpty()
+                // LiveData can arrive before ListAdapter commits its list after returning from the player.
+                val awaitingItems = if (focusArea == "episode") {
+                    val source = model.episodes.value
+                    source !is Resource.Success || source.value.isNotEmpty()
+                } else !model.recommendations.value.isNullOrEmpty()
+                if (keys.isEmpty() && awaitingItems && !comingSoon) return@post
                 val index = resolveTvFocusIndex(keys, focusKey?.let { TvFocusAnchor(focusArea, it, focusIndex) })
                 if (index != null) {
                     val target = list.findViewHolderForAdapterPosition(index)?.itemView
                     if (target == null) { list.scrollToPosition(index); list.doOnNextLayout { if (binding === ui) restoreFocus() } }
-                    else { pendingFocus = false; target.requestFocus(); releaseRail?.invoke(); releaseRail = (activity as? MainActivity)?.let { bindNexoTvRail(it, target.id) } }
+                    else if (target.requestFocus()) {
+                        pendingFocus = false; releaseRail?.invoke(); releaseRail = (activity as? MainActivity)?.let { bindNexoTvRail(it, target.id) }
+                    } else list.doOnNextLayout { if (binding === ui) restoreFocus() }
                     return@post
                 }
             }
             val target = ui.root.findViewById<View>(focusId)?.takeIf { it.isShown && it.isFocusable }
                 ?: ui.nexoTvResultPlay.takeIf { it.isShown } ?: ui.nexoTvResultFavorite
-            pendingFocus = false; target.requestFocus()
-            releaseRail?.invoke(); releaseRail = (activity as? MainActivity)?.let { bindNexoTvRail(it, target.id) }
+            if (target.requestFocus()) {
+                pendingFocus = false
+                releaseRail?.invoke(); releaseRail = (activity as? MainActivity)?.let { bindNexoTvRail(it, target.id) }
+            } else ui.root.doOnNextLayout { if (binding === ui) restoreFocus() }
         }
     }
     override fun onResume() { super.onResume(); MainActivity.afterPluginsLoadedEvent += plugins; restoreFocus() }
-    override fun onStop() { MainActivity.afterPluginsLoadedEvent -= plugins; releaseRail?.invoke(); releaseRail = null; super.onStop() }
+    override fun onStop() {
+        // A transition/season animation can move focus before onPause. Restore the action's origin,
+        // rather than that transient focus, only when handing off to the native player.
+        if (parentFragmentManager.primaryNavigationFragment is com.lagradost.cloudstream3.ui.player.GeneratorPlayer) {
+            playbackOrigin?.let { focusArea = it.sectionKey; focusKey = it.itemKey; focusIndex = it.fallbackIndex }
+        }
+        playbackOrigin = null
+        MainActivity.afterPluginsLoadedEvent -= plugins
+        releaseRail?.invoke(); releaseRail = null; super.onStop()
+    }
     override fun onSaveInstanceState(out: Bundle) {
         out.putInt("focus", focusId); out.putString("key", focusKey); out.putString("area", focusArea); out.putInt("index", focusIndex)
         super.onSaveInstanceState(out)

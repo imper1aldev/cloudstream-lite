@@ -58,6 +58,7 @@ class NexoTvDetailsVisualTest {
     }
     @Test fun captureMovieAndSeriesDetails() {
         val label=InstrumentationRegistry.getArguments().getString("nexo_details_capture") ?: "preview"
+        val phase2=InstrumentationRegistry.getArguments().getString("nexo_details_phase2")=="true"
         NexoTvTestEnvironment().use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             var activity:MainActivity?=null
             scenario.onActivity { activity=it }
@@ -82,6 +83,17 @@ class NexoTvDetailsVisualTest {
                 scenario.onActivity { it.loadResult(match.url,match.apiName,match.name) }
                 await { a -> (model(a)?.page?.value as? Resource.Success)?.value?.url==match.url && a.findViewById<View>(env.id("nexo_tv_result_play"))?.isShown==true }
                 await { it.findViewById<ImageView>(env.id("nexo_tv_result_backdrop"))?.drawable!=null }
+                if(phase2 && kind=="series") {
+                    await { (model(it)?.episodes?.value as? Resource.Success)?.value?.isNotEmpty()==true }
+                    // Synthetic watch progress only in this temporary profile, not actual viewing history.
+                    scenario.onActivity { a ->
+                        val m=checkNotNull(model(a));val ep=(m.episodes.value as Resource.Success).value.first()
+                        com.lagradost.cloudstream3.utils.DataStoreHelper.setViewPos(ep.id,60_000,300_000)
+                        com.lagradost.cloudstream3.utils.DataStoreHelper.setLastWatched(ep.parentId,ep.id,ep.episode,ep.season)
+                        m.reloadEpisodes()
+                    }
+                    await { it.findViewById<View>(env.id("nexo_tv_result_resume"))?.isShown==true }
+                }
                 scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_result_play")).requestFocus() }
                 env.instrumentation.waitForIdleSync();SystemClock.sleep(1500)
                 scenario.onActivity { a ->
@@ -94,6 +106,15 @@ class NexoTvDetailsVisualTest {
                 }
                 env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
                     File(env.context.getExternalFilesDir(null),"details-$label-$kind.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+                }
+                if(phase2 && kind=="series") {
+                    scenario.onActivity { a -> a.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.requestFocus() }
+                    env.instrumentation.waitForIdleSync()
+                    env.key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT);env.key(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+                    env.instrumentation.waitForIdleSync();SystemClock.sleep(800)
+                    env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+                        File(env.context.getExternalFilesDir(null),"details-$label-episodes.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+                    }
                 }
             }
         } }

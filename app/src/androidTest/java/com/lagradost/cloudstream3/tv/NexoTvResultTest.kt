@@ -18,7 +18,7 @@ import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
 
 class NexoTvResultTest {
-    private class Provider : MainAPI() {
+    private class Provider(private val mediaUrl:String?=null) : MainAPI() {
         override var name = "NexoStream"
         override var mainUrl = "https://nexo-tv-result-${System.nanoTime()}.invalid"
         override val hasMainPage = true
@@ -33,8 +33,10 @@ class NexoTvResultTest {
             loads.add(url)
             return when(url.substringAfterLast('/')) {
                 "series" -> newTvSeriesLoadResponse("Series fixture",url,TvType.TvSeries,
-                    listOf(newEpisode("season-1-episode-1") { season=1; episode=1; name="First" },
+                    listOf(newEpisode("season-1-episode-1") { season=1; episode=1; name="First";runTime=2700;description="The first episode synopsis." },
                         newEpisode("season-2-episode-7") { season=2; episode=7; name="Seventh" }))
+                "empty" -> newTvSeriesLoadResponse("Empty fixture",url,TvType.TvSeries,emptyList())
+                "many" -> newTvSeriesLoadResponse("Many seasons",url,TvType.TvSeries,(1..31).map { number -> newEpisode("many-$number") { season=number;episode=1;name="Season $number" } })
                 "range" -> newTvSeriesLoadResponse("Range fixture",url,TvType.TvSeries,(1..65).map { number -> newEpisode("range-$number") { season=1; episode=number; name="Range $number" } }) { plot=("A long synopsis for the TV layout. ").repeat(80) }
                 "anime" -> newAnimeLoadResponse("Anime fixture",url,TvType.Anime) {
                     addEpisodes(DubStatus.Subbed,listOf(newEpisode("sub-1") { episode=1; name="Sub" }))
@@ -50,12 +52,122 @@ class NexoTvResultTest {
         }
         override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
             extracts.add(data)
-            return false // No network or player: assert UI sends the original provider payload.
+            mediaUrl?.let { url ->
+                callback(com.lagradost.cloudstream3.utils.newExtractorLink("Local","[Fixture][LAT] Local",url,com.lagradost.cloudstream3.utils.ExtractorLinkType.VIDEO) { quality=1080 })
+                return true
+            }
+            return false // No network or player unless a test explicitly supplies local PCM media.
         }
     }
     private fun ownResultExists() {
         try { Class.forName("com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment") }
         catch(e: ClassNotFoundException) { throw AssertionError("Own TV Details missing",e) }
+    }
+    @Test fun singleEpisodeResumeRefreshAlsoWorksWithPhoneLayout() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider,layout=0).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var model:ResultViewModel2?=null
+            scenario.onActivity { a ->
+                env.register()
+                model=ViewModelProvider(a)[ResultViewModel2::class.java]
+                model!!.load(a,"${provider.mainUrl}/series",provider.name,false,DubStatus.None,null)
+            }
+            env.await(scenario,"Shared phone model episodes missing") { (model!!.episodes.value as? com.lagradost.cloudstream3.mvvm.Resource.Success)?.value?.size==1 }
+            var id=0
+            scenario.onActivity {
+                val ep=(model!!.episodes.value as com.lagradost.cloudstream3.mvvm.Resource.Success).value.single();id=ep.id
+                com.lagradost.cloudstream3.utils.DataStoreHelper.setViewPos(ep.id,50_000,200_000)
+                com.lagradost.cloudstream3.utils.DataStoreHelper.setLastWatched(ep.parentId,ep.id,ep.episode,ep.season)
+                model!!.reloadEpisodes()
+            }
+            env.await(scenario,"Single-episode phone resume was not refreshed") { model!!.resumeWatching.value?.result?.id==id }
+            scenario.onActivity {
+                assertEquals(50,model!!.resumeWatching.value!!.progress!!.progress)
+                assertEquals(200,model!!.resumeWatching.value!!.progress!!.maxProgress)
+                assertEquals(50_000L,(model!!.episodes.value as com.lagradost.cloudstream3.mvvm.Resource.Success).value.single().position)
+            }
+        } }
+    }
+    @Test fun resumeBannerUsesStoredEpisodeAcrossSeasonSelection() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            fun model(a:MainActivity)=ViewModelProvider((a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).childFragmentManager.primaryNavigationFragment!!)[ResultViewModel2::class.java]
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/series",provider.name,"Series fixture") }
+            env.await(scenario,"Episodes missing") { (model(it).episodes.value as? com.lagradost.cloudstream3.mvvm.Resource.Success)?.value?.isNotEmpty()==true }
+            scenario.onActivity { a ->
+                assertTrue(a.findViewById<View>(env.id("nexo_tv_result_resume"))?.visibility!=View.VISIBLE)
+                assertEquals("Episode runtime must use seconds, not minutes", "45m",a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.findViewById<TextView>(env.id("nexo_tv_episode_runtime")).text.toString())
+                val ep=(model(a).episodes.value as com.lagradost.cloudstream3.mvvm.Resource.Success).value.first()
+                com.lagradost.cloudstream3.utils.DataStoreHelper.setViewPos(ep.id,60_000,300_000)
+                com.lagradost.cloudstream3.utils.DataStoreHelper.setLastWatched(ep.parentId,ep.id,ep.episode,ep.season)
+                model(a).reloadEpisodes()
+            }
+            env.await(scenario,"Stored episode resume banner missing") { it.findViewById<TextView>(env.id("nexo_tv_result_resume_title"))?.text?.contains("First")==true }
+            scenario.onActivity { a ->
+                assertEquals(20,a.findViewById<android.widget.ProgressBar>(env.id("nexo_tv_result_resume_progress")).progress)
+                assertFalse(a.findViewById<View>(env.id("nexo_tv_result_resume")).isFocusable)
+                model(a).changeSeason(2)
+            }
+            env.await(scenario,"Season2 card not bound") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes"))?.findViewHolderForAdapterPosition(0)?.itemView?.findViewById<TextView>(env.id("nexo_tv_episode_title"))?.text=="Seventh" }
+            scenario.onActivity { a ->
+                assertTrue(a.findViewById<TextView>(env.id("nexo_tv_result_resume_title")).text.contains("First"))
+                assertTrue("Unknown runtime leaked from prior season",a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.findViewById<View>(env.id("nexo_tv_episode_runtime")).visibility!=View.VISIBLE)
+                a.findViewById<View>(env.id("nexo_tv_result_play")).performClick()
+            }
+            env.await(scenario,"Reanudar used the browsed season instead of saved episode") { provider.extracts.contains("${provider.mainUrl}/season-1-episode-1") }
+        } }
+    }
+    @Test fun returningFromPlayerKeepsEpisodeIdentity() {
+        com.lagradost.cloudstream3.LiteRealPlayerSwitchTest.MediaServer().use { server ->
+            val provider=Provider(server.url("episode.wav"))
+            NexoTvTestEnvironment(provider).use { env ->
+                val paused=com.lagradost.cloudstream4.AppSettings(env.context).player.startPaused;val old=paused.get();paused.set(false)
+                try { ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    fun fragment(a:MainActivity)=(a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).childFragmentManager.primaryNavigationFragment
+                    env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+                    scenario.onActivity { it.loadResult("${provider.mainUrl}/series",provider.name,"Series fixture") }
+                    env.await(scenario,"Details initial focus missing") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+                    scenario.onActivity { ViewModelProvider(fragment(it)!!)[ResultViewModel2::class.java].changeSeason(2) }
+                    env.await(scenario,"Season2 card missing") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes"))?.findViewHolderForAdapterPosition(0)?.itemView?.findViewById<TextView>(env.id("nexo_tv_episode_title"))?.text?.contains("Seventh")==true }
+                    var key:Any?=null
+                    scenario.onActivity { a ->
+                        val card=a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView
+                        card.requestFocus();key=card.tag
+                    }
+                    env.await(scenario,"Episode did not receive focus before playback") { it.currentFocus?.tag==key }
+                    scenario.onActivity { a -> a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.performClick() }
+                    env.await(scenario,"Native player did not start local media") { (fragment(it) as? com.lagradost.cloudstream3.ui.player.GeneratorPlayer)?.playerView?.player?.let { p -> p.isPlaying && p.currentPosition>0 }==true }
+                    env.key(android.view.KeyEvent.KEYCODE_BACK)
+                    env.instrumentation.waitForIdleSync()
+                    var stillPlayer=false;scenario.onActivity { stillPlayer=fragment(it) is com.lagradost.cloudstream3.ui.player.GeneratorPlayer }
+                    // Native TV Back first hides visible controls, then exits; preserve that behavior.
+                    if(stillPlayer) env.key(android.view.KeyEvent.KEYCODE_BACK)
+                    env.await(scenario,"Return did not restore same episode identity") { fragment(it) is com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment && it.currentFocus?.tag==key }
+                    assertTrue(server.requests.contains("/episode.wav"))
+                    assertEquals("Original episode payload changed",listOf("${provider.mainUrl}/season-2-episode-7"),provider.extracts.toList())
+                } } finally { paused.set(old) }
+            }
+        }
+    }
+    @Test fun emptyAndManySeasonsKeepNavigationUsable() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/empty",provider.name,"Empty fixture") }
+            env.await(scenario,"Empty title not loaded") { it.findViewById<TextView>(env.id("nexo_tv_result_title"))?.text=="Empty fixture" }
+            scenario.onActivity { a ->
+                assertTrue(a.findViewById<View>(env.id("nexo_tv_result_episodes")).visibility!=View.VISIBLE)
+                assertTrue(a.findViewById<View>(env.id("nexo_tv_result_play")).visibility!=View.VISIBLE)
+            }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/many",provider.name,"Many seasons") }
+            env.await(scenario,"Many-season selector missing") { it.findViewById<View>(env.id("nexo_tv_result_season"))?.isShown==true }
+            scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_result_season")).performClick() }
+            // Scroll the native choice list instead of generating 31 inline tabs.
+            repeat(35) { env.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN) }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            env.await(scenario,"Last season payload not shown") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes"))?.findViewHolderForAdapterPosition(0)?.itemView?.findViewById<TextView>(env.id("nexo_tv_episode_title"))?.text?.contains("Season 31")==true }
+        } }
     }
     @Test fun initialPlayFocusKeepsNormalHeroTitleVisible() {
         val provider=Provider()
