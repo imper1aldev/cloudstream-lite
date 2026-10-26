@@ -174,9 +174,10 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         rows?.submitList(content) {
             if (binding !== ui) return@submitList
             if (!empty) ui.nexoTvHomeList.post {
-                if (pendingRestore && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) restoreFocus()
+                if (binding === ui && pendingRestore && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) restoreFocus()
             } else if (!loading && pendingRestore) ui.nexoTvHomeRetry.post {
-                if (binding === ui && pendingRestore && ui.root.findFocus() == null) ui.nexoTvHomeRetry.requestFocus()
+                if (binding !== ui) return@post
+                if (pendingRestore && ui.root.findFocus() == null) ui.nexoTvHomeRetry.requestFocus()
                 bindEntry(ui.nexoTvHomeRetry)
             }
         }
