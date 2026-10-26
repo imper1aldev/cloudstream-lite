@@ -13,12 +13,21 @@
         <item name="android:focusable">true</item>
         <item name="android:clickable">true</item>
     </style>
-    <style name="NexoTvDetailsBadge" parent="ChipFilled">
-        <item name="chipBackgroundColor">#CC18202D</item>
-        <item name="chipStrokeColor">#607586A3</item>
+    <style name="NexoTvDetailsGenre" parent="ChipFilled">
+        <item name="chipBackgroundColor">#6618202D</item>
+        <item name="chipStrokeColor">#506C7A92</item>
         <item name="chipStrokeWidth">1dp</item>
-        <item name="chipCornerRadius">6dp</item>
-        <item name="chipMinHeight">28dp</item>
-        <item name="android:textSize">14sp</item>
+        <item name="chipCornerRadius">12dp</item>
+        <item name="chipMinHeight">24dp</item>
+        <item name="chipStartPadding">8dp</item>
+        <item name="chipEndPadding">8dp</item>
+        <item name="textStartPadding">0dp</item>
+        <item name="textEndPadding">0dp</item>
+        <item name="android:textAppearance">@style/NexoTvDetailsGenreText</item>
+    </style>
+    <style name="NexoTvDetailsGenreText" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:fontFamily">sans-serif</item>
     </style>
 </resources>

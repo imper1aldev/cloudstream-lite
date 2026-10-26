@@ -6,11 +6,13 @@ import android.view.ViewTreeObserver
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
+import androidx.core.view.children
 import androidx.core.view.doOnNextLayout
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
+import com.google.android.material.chip.Chip
 import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.NexoTvResultBinding
@@ -67,13 +69,16 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         cancelNexoTvPendingFocus(ui.root) { pendingFocus = false }
         // Truncation can change after text, width or font-scale updates without a new page.
         ui.nexoTvResultPlot.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (binding === ui) {
-                val layout = ui.nexoTvResultPlot.layout
-                val truncated = layout != null && (0 until layout.lineCount).any { layout.getEllipsisCount(it) > 0 }
-                if (!truncated && ui.nexoTvResultMore.hasFocus()) {
-                    (ui.nexoTvResultPlay.takeIf { it.isShown } ?: ui.nexoTvResultFavorite).requestFocus()
+            // Changing a sibling's visibility during layout can leave its parent with stale bounds.
+            ui.nexoTvResultPlot.post {
+                if (binding === ui) {
+                    val layout = ui.nexoTvResultPlot.layout
+                    val truncated = layout != null && (0 until layout.lineCount).any { layout.getEllipsisCount(it) > 0 }
+                    if (!truncated && ui.nexoTvResultMore.hasFocus()) {
+                        (ui.nexoTvResultPlay.takeIf { it.isShown } ?: ui.nexoTvResultFavorite).requestFocus()
+                    }
+                    ui.nexoTvResultMore.isVisible = truncated
                 }
-                ui.nexoTvResultMore.isVisible = truncated
             }
         }
         stored = getStoredData() ?: return
@@ -98,12 +103,19 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
                     comingSoon = data.comingSoon
                     ui.nexoTvResultStatus.isVisible = false
                     ui.nexoTvResultTitle.text = data.title
-                    ui.nexoTvResultType.text = data.typeText.asString(requireContext())
                     val metadata = listOfNotNull(data.yearText, data.durationText, data.ratingText, data.contentRatingText, data.onGoingText, data.nextAiringEpisode)
                         .map { it.asString(requireContext()) }.filter { it.isNotBlank() }
-                    populateChips(ui.nexoTvResultMeta, metadata, R.style.NexoTvDetailsBadge)
+                    ui.nexoTvResultMeta.text = metadata.joinToString("  |  ")
                     ui.nexoTvResultMeta.isVisible = metadata.isNotEmpty()
-                    populateChips(ui.nexoTvResultGenres, data.tags, R.style.NexoTvDetailsBadge)
+                    populateChips(ui.nexoTvResultGenres, data.tags, R.style.NexoTvDetailsGenre)
+                    // Informational pills need no inherited button/touch-target insets.
+                    ui.nexoTvResultGenres.children.filterIsInstance<Chip>().forEach { chip ->
+                        chip.setEnsureMinTouchTargetSize(false)
+                        chip.minHeight = 0
+                        chip.minimumHeight = 0
+                        chip.setTextAppearance(R.style.NexoTvDetailsGenreText)
+                        chip.setPaddingRelative(chip.paddingStart, 0, chip.paddingEnd, 0)
+                    }
                     ui.nexoTvResultGenres.isVisible = data.tags.isNotEmpty()
                     ui.nexoTvResultPlot.text = data.plotText.asString(requireContext())
                     ui.nexoTvResultMore.setOnClickListener {

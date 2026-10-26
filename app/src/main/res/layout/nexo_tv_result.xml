@@ -27,30 +27,28 @@
                         android:orientation="vertical"
                         app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"
                         app:layout_constraintWidth_percent="0.66">
-                        <TextView android:id="@+id/nexo_tv_result_type"
-                            android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:textSize="14sp" android:textStyle="bold" android:textAllCaps="true"
-                            android:letterSpacing="0.12" android:textColor="#AFBFE3" />
                         <TextView android:id="@+id/nexo_tv_result_title"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp" android:textSize="36sp" android:textStyle="bold"
+                            android:textSize="34sp" android:textStyle="bold"
                             android:fontFamily="sans-serif-black" android:textColor="#FFFFFF" />
-                        <com.google.android.material.chip.ChipGroup android:id="@+id/nexo_tv_result_meta"
+                        <TextView android:id="@+id/nexo_tv_result_meta"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp" app:chipSpacingHorizontal="8dp" app:chipSpacingVertical="4dp" />
+                            android:layout_marginTop="12dp" android:textSize="14sp"
+                            android:textColor="#C4CBD8" android:lineSpacingExtra="2dp" />
                         <com.google.android.material.chip.ChipGroup android:id="@+id/nexo_tv_result_genres"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp" app:chipSpacingHorizontal="8dp" app:chipSpacingVertical="4dp"
+                            android:layout_marginTop="12dp" app:chipSpacingHorizontal="6dp" app:chipSpacingVertical="6dp"
                             android:visibility="gone" />
                         <TextView android:id="@+id/nexo_tv_result_plot"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp" android:textSize="17sp" android:lineSpacingExtra="3dp"
+                            android:layout_marginTop="16dp" android:textSize="16sp" android:lineSpacingExtra="2dp"
                             android:textColor="#D5DCE8" android:maxLines="3" android:ellipsize="end" />
                         <TextView android:id="@+id/nexo_tv_result_more"
                             style="@style/NexoTvDetailsAction" android:layout_height="44dp"
                             android:layout_marginTop="8dp" android:minHeight="44dp"
-                            android:background="@drawable/nexo_tv_details_secondary"
-                            android:text="@string/lite_more" android:textSize="14sp" android:visibility="gone" />
+                            android:background="@drawable/nexo_tv_text_focus"
+                            android:paddingStart="8dp" android:paddingEnd="8dp" android:textColor="#D5DCE8"
+                            android:text="@string/lite_more" android:textSize="13sp" android:visibility="gone" />
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                             android:orientation="horizontal" android:gravity="center_vertical"
                             android:layout_marginTop="20dp" android:clipChildren="false">
