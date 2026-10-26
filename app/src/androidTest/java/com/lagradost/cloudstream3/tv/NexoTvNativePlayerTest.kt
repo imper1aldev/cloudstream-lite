@@ -9,7 +9,7 @@ import com.lagradost.cloudstream4.AppSettings
 import org.junit.Assert.*
 import org.junit.Test
 
-/** TV intentionally keeps upstream playback; PHONE-only Lite policies are checked separately. */
+/** Real native backend exercises TV startup, retry and mirror continuity. */
 class NexoTvNativePlayerTest {
     private fun state(f:LiteProgressivePlaybackTest.Fixture, condition:(Player)->Boolean):Boolean {
         var result=false;f.scenario.onActivity { result=f.fragment.playerView?.player?.let(condition)==true };return result
@@ -20,14 +20,13 @@ class NexoTvNativePlayerTest {
         try { LiteRealPlayerSwitchTest.MediaServer().use { server -> LiteProgressivePlaybackTest.Fixture(layout=1,realPlayer=true).use { block(it,server) } } }
         finally { setting.set(old) }
     }
-    @Test fun tvStartsAfterExtractionCompletesAndKeepsNativeRetry() = real { f,server ->
+    @Test fun tvStartsLatDuringExtractionAndKeepsNativeRetry() = real { f,server ->
         f.emit("LAT",quality=2160,server="Broken",url=server.url("fail"))
         f.emit("LAT",quality=1080,server="Good",url=server.url("good"))
-        SystemClock.sleep(300)
-        assertFalse("TV unexpectedly adopted PHONE-only progressive start",state(f) { it.isPlaying })
-        f.finish()
         f.await(15_000) { state(f) { it.isPlaying && it.currentMediaItem?.localConfiguration?.uri?.path=="/good" } }
+        assertTrue("Extraction must still be running during TV playback", f.vm.state.loading is com.lagradost.cloudstream3.mvvm.Resource.Loading)
         assertTrue("Failed native server was not attempted",server.requests.contains("/fail"))
+        f.finish()
         assertTrue(state(f) { it.playWhenReady && it.currentPosition>0 })
     }
     @Test fun nativeMirrorDialogSwitchKeepsPositionAndPlayingIntent() = real { f,server ->

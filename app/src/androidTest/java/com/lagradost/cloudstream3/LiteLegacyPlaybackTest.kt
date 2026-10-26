@@ -20,13 +20,13 @@ class LiteLegacyPlaybackTest {
         f.finish()
         assertEquals("[Fixture][ENG] Server",f.loads.single().name)
     }
-    @Test fun otherProviderRetainsLegacyRankingOnPhone() = LiteProgressivePlaybackTest.Fixture().use { f ->
+    @Test fun otherProviderRetainsLegacyRankingOnPhone() = LiteProgressivePlaybackTest.Fixture(layout=0).use { f ->
         assertTrue(Globals.isLayout(Globals.PHONE))
         f.setProvider("OtherProvider")
         matchesLegacyOrder(f)
     }
-    @Test fun nexoProviderRetainsLegacyRankingOnTv() = LiteProgressivePlaybackTest.Fixture(layout=1).use { f ->
-        assertTrue(Globals.isLayout(Globals.TV))
+    @Test fun nexoProviderRetainsLegacyRankingOnDedicatedEmulator() = LiteProgressivePlaybackTest.Fixture(layout=2).use { f ->
+        assertTrue(Globals.isLayout(Globals.EMULATOR))
         matchesLegacyOrder(f)
     }
 }

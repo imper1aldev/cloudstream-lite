@@ -49,7 +49,7 @@ class LitePlaybackDecisionTest {
         assertEquals("high", chooseLiteStart(listOf(low, degraded, high), false, false))
     }
 
-    @Test fun onlyNexoStreamPhoneAndTabletLayoutsUseLitePlayback() {
+    @Test fun onlyNexoStreamInSupportedLayoutsUsesLitePlayback() {
         assertTrue(usesLitePlayback(true, "NexoStream"))
         assertFalse(usesLitePlayback(false, "NexoStream"))
         assertFalse(usesLitePlayback(true, "OtherProvider"))

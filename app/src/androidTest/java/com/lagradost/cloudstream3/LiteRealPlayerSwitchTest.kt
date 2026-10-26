@@ -107,6 +107,16 @@ class LiteRealPlayerSwitchTest {
         f.finish()
         assertTrue(state(f) { it.playWhenReady })
     }
+    @Test fun automaticHttpRetryStillAllowsFinalUpgradeAndPreservesPosition() = real { f,server ->
+        f.emit("LAT",quality=2160,url=server.url("fail"))
+        f.emit("LAT",quality=720,url=server.url("good"))
+        f.await(12000) { state(f) { it.isPlaying && it.currentMediaItem?.localConfiguration?.uri?.path=="/good" && it.currentPosition>1200 } }
+        assertTrue("HTTP failure was not recorded",f.vm.state.erroredLinks.isNotEmpty())
+        var before=0L;f.scenario.onActivity { before=f.fragment.playerView!!.player!!.currentPosition }
+        f.emit("LAT",quality=1080,url=server.url("better"));f.finish()
+        f.await(8000) { state(f) { it.isPlaying && it.currentMediaItem?.localConfiguration?.uri?.path=="/better" } }
+        assertTrue("Automatic retry upgrade lost position or playing intent",state(f) { it.playWhenReady && it.currentPosition>=before-500 })
+    }
     @Test fun stalledAutomaticSourceUsesAvailableLatBeforeExtractionFinishes() = real { f,server ->
         f.emit("LAT",quality=2160,url=server.url("wait"))
         f.await(10000) { state(f) { it.playbackState==Player.STATE_BUFFERING && it.playWhenReady } }
