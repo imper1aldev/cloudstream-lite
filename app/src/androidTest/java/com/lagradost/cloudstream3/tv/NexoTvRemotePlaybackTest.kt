@@ -87,6 +87,9 @@ class NexoTvRemotePlaybackTest {
                             if(fragment!=null) { activeModel=ViewModelProvider(fragment)[PlayerGeneratorViewModel::class.java];true } else false
                         }
                         var firstPosition=0L
+                        val timeline=JSONArray()
+                        item.put("startupTimeline",timeline)
+                        var lastSnapshot=""
                         wait(scenario,150_000) { a ->
                             val state=activeModel!!.state
                             item.put("linksBeforeFirstProgress",state.links.size).put("erroredBeforeFirstProgress",state.erroredLinks.size)
@@ -94,6 +97,17 @@ class NexoTvRemotePlaybackTest {
                             val fragment=host(a).childFragmentManager.primaryNavigationFragment as? GeneratorPlayer
                             checkNotNull(fragment) { "Player exited before first progress" }
                             val player=fragment.playerView?.player
+                            @Suppress("UNCHECKED_CAST")
+                            val selected=GeneratorPlayer::class.java.getDeclaredField("currentSelectedLink").apply { isAccessible=true }.get(fragment) as? com.lagradost.cloudstream3.ui.player.VideoLink
+                            val slow=GeneratorPlayer::class.java.getDeclaredField("liteSlowStarts").apply { isAccessible=true }.get(fragment) as Set<*>
+                            val key=listOf(selected?.first?.name,player?.playbackState,player?.bufferedPosition?.div(1000),state.links.size,state.erroredLinks.size,slow.size,state.loading is Resource.Loading,player?.playbackSuppressionReason).toString()
+                            if(key!=lastSnapshot) {
+                                timeline.put(JSONObject().put("atMs",SystemClock.elapsedRealtime()-playRequested).put("source",selected?.first?.name)
+                                    .put("state",player?.playbackState).put("bufferedMs",player?.bufferedPosition).put("links",state.links.size)
+                                    .put("errored",state.erroredLinks.size).put("slow",slow.size).put("extracting",state.loading is Resource.Loading)
+                                    .put("playWhenReady",player?.playWhenReady).put("suppressed",player?.playbackSuppressionReason))
+                                lastSnapshot=key
+                            }
                             if(player?.isPlaying==true && player.currentPosition>500) { firstPosition=player.currentPosition;true } else false
                         }
                         item.put("startedMs",SystemClock.elapsedRealtime()-started).put("playToFirstProgressMs",SystemClock.elapsedRealtime()-playRequested)
