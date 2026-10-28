@@ -58,6 +58,7 @@ class NexoTvDetailsVisualTest {
     }
     @Test fun captureMovieAndSeriesDetails() {
         val label=InstrumentationRegistry.getArguments().getString("nexo_details_capture") ?: "preview"
+        val phase3=InstrumentationRegistry.getArguments().getString("nexo_details_phase3")=="true"
         val phase2=InstrumentationRegistry.getArguments().getString("nexo_details_phase2")=="true"
         NexoTvTestEnvironment().use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             var activity:MainActivity?=null
@@ -106,6 +107,24 @@ class NexoTvDetailsVisualTest {
                 }
                 env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
                     File(env.context.getExternalFilesDir(null),"details-$label-$kind.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+                }
+                if(phase3) {
+                    await { it.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_actors"))?.adapter?.itemCount?.let { n -> n>0 }==true || it.findViewById<View>(env.id("nexo_tv_result_actor_text"))?.isShown==true }
+                    scenario.onActivity { a ->
+                        val row=a.findViewById<View>(env.id("nexo_tv_result_actors"))
+                        if(row.isShown) row.requestFocus()
+                        else a.findViewById<View>(env.id("nexo_tv_result_actor_text")).let { text -> text.parent.requestChildFocus(text,text) }
+                    }
+                    env.instrumentation.waitForIdleSync();SystemClock.sleep(1500)
+                    env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+                        File(env.context.getExternalFilesDir(null),"details-$label-$kind-cast.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+                    }
+                    await { it.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_recommendations"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+                    scenario.onActivity { a -> a.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_recommendations")).findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+                    env.instrumentation.waitForIdleSync();SystemClock.sleep(1500)
+                    env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+                        File(env.context.getExternalFilesDir(null),"details-$label-$kind-related.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+                    }
                 }
                 if(phase2 && kind=="series") {
                     scenario.onActivity { a -> a.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.requestFocus() }

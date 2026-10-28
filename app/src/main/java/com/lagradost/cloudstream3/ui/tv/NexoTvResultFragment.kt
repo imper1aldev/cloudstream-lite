@@ -32,6 +32,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     private var binding: NexoTvResultBinding? = null
     private var episodes: NexoTvEpisodeAdapter? = null
     private var recommendations: NexoTvCardAdapter? = null
+    private var actors: NexoTvActorAdapter? = null
     private var releaseRail: (() -> Unit)? = null
     private var popup: AlertDialog? = null
     private var loading: AlertDialog? = null
@@ -95,8 +96,30 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
             { ep, _ -> focusIndex = episodes?.currentList?.indexOf(ep) ?: 0 })
         ui.nexoTvResultEpisodes.setLinearListLayout(nextLeft = R.id.nav_rail_view, nextRight = FOCUS_SELF)
         ui.nexoTvResultEpisodes.adapter = episodes
+        actors = NexoTvActorAdapter()
+        ui.nexoTvResultActors.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
+        ui.nexoTvResultActors.adapter = actors
+        ui.nexoTvResultActors.setOnKeyListener { _, key, event ->
+            if (event.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            val direction = when (key) {
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT -> -1
+                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> 1
+                else -> return@setOnKeyListener false
+            }
+            val row = ui.nexoTvResultActors
+            val towardMenu = direction == if (row.layoutDirection == View.LAYOUT_DIRECTION_RTL) 1 else -1
+            if (row.canScrollHorizontally(direction)) row.smoothScrollBy(direction * row.width / 2, 0)
+            else if (towardMenu) activity?.findViewById<View>(R.id.nav_rail_view)?.requestFocus()
+            true
+        }
         recommendations = NexoTvCardAdapter(false,
-            { loadResult(it.url, it.apiName, it.name) }, { false },
+            { item ->
+                // Preserve the activated card while navigation animations move focus out of this view.
+                focusArea = "recommendation"; focusKey = item.tvItemKey
+                focusIndex = recommendations?.currentList?.indexOf(item)?.coerceAtLeast(0) ?: 0
+                pendingFocus = true
+                loadResult(item.url, item.apiName, item.name)
+            }, { false },
             { item, _ -> focusIndex = recommendations?.currentList?.indexOf(item) ?: 0 })
         ui.nexoTvResultRecommendations.setLinearListLayout(nextLeft = R.id.nav_rail_view, nextRight = FOCUS_SELF)
         ui.nexoTvResultRecommendations.adapter = recommendations
@@ -105,6 +128,12 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
                 is Resource.Success -> {
                     val data = page.value
                     comingSoon = data.comingSoon
+                    val cast = data.actors.orEmpty()
+                    actors?.submitList(cast)
+                    ui.nexoTvResultActors.isVisible = cast.isNotEmpty()
+                    ui.nexoTvResultActorText.text = data.actorsText?.asString(requireContext())
+                    ui.nexoTvResultActorText.isVisible = cast.isEmpty() && !ui.nexoTvResultActorText.text.isNullOrBlank()
+                    ui.nexoTvResultActorTitle.isVisible = cast.isNotEmpty() || ui.nexoTvResultActorText.isVisible
                     ui.nexoTvResultStatus.isVisible = false
                     ui.nexoTvResultTitle.text = data.title
                     val metadata = listOfNotNull(data.yearText, data.durationText, data.ratingText, data.contentRatingText, data.onGoingText, data.nextAiringEpisode)
@@ -311,6 +340,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         releaseRail?.invoke(); releaseRail = null
         popup?.dismiss(); popup = null; loading?.dismiss(); loading = null; selection?.dismiss(); selection = null
         binding?.nexoTvResultBackdrop?.dispose()
+        binding?.nexoTvResultActors?.adapter = null; actors = null
         binding?.nexoTvResultEpisodes?.adapter = null; binding?.nexoTvResultRecommendations?.adapter = null
         episodes = null; recommendations = null; binding = null; pendingFocus = true
         super.onDestroyView()

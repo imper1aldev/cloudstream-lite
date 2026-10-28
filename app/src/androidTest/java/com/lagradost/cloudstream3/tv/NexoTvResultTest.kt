@@ -46,6 +46,11 @@ class NexoTvResultTest {
                     year=2020;duration=148;tags=listOf("Accion","Ciencia ficcion","Drama")
                     plot="Una historia de viajes, misterios y aventuras que pone a prueba a sus protagonistas. ".repeat(8)
                 }
+                "supplemental" -> newMovieLoadResponse("Supplemental fixture",url,TvType.Movie,"movie-data") {
+                    actors=(1..36).map { n -> ActorData(Actor("Person $n",if(n==2) null else "file:///missing-actor-$n.png"),roleString=if(n%2==1) "Character $n" else null) }
+                    recommendations=listOf(newMovieSearchResponse("Original related title","$mainUrl/related?original=1",TvType.Movie))
+                }
+                "names-only" -> newMovieLoadResponse("Names only",url,TvType.Movie,"movie-data") { actors=listOf(ActorData(Actor("No photo person"))) }
                 "soon" -> newMovieLoadResponse("Soon fixture",url,TvType.Movie,"") { comingSoon=true }
                 else -> newMovieLoadResponse("Movie fixture",url,TvType.Movie,"movie-data") { plot="A short plot" }
             }
@@ -58,6 +63,63 @@ class NexoTvResultTest {
             }
             return false // No network or player unless a test explicitly supplies local PCM media.
         }
+    }
+    @Test fun emptySupplementalRowsAreSkipped() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/movie",provider.name,"Movie fixture") }
+            env.await(scenario,"Play missing") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            scenario.onActivity { a ->
+                for(name in listOf("nexo_tv_result_actors","nexo_tv_result_actor_title","nexo_tv_result_actor_text","nexo_tv_result_recommendations","nexo_tv_result_recommendation_title")) {
+                    val row=a.findViewById<View>(env.id(name));assertNotNull("Supplemental view missing: $name",row)
+                    assertEquals("Empty row consumes space: $name",View.GONE,row.visibility)
+                }
+            }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+            scenario.onActivity { a -> assertFalse("Focus entered an empty row",a.currentFocus?.id==env.id("nexo_tv_result_actors")) }
+        } }
+    }
+    @Test fun castScrollsWithoutFakeActionsAndNamesSurviveMissingImages() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/supplemental",provider.name,"Supplemental fixture") }
+            env.await(scenario,"Cast not rendered") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_actors"))?.adapter?.itemCount==36 }
+            scenario.onActivity { a ->
+                val row=a.findViewById<RecyclerView>(env.id("nexo_tv_result_actors"));row.requestFocus()
+                assertFalse("Informational cast offers a fake click",row.hasOnClickListeners())
+                val card=row.findViewHolderForAdapterPosition(0)!!.itemView
+                assertFalse(card.isFocusable);assertFalse(card.hasOnClickListeners())
+                assertTrue(card.findViewById<TextView>(env.id("nexo_tv_actor_name")).text=="Person 1")
+                assertTrue(card.findViewById<TextView>(env.id("nexo_tv_actor_role")).text=="Character 1")
+            }
+            env.await(scenario,"Cast scroll container not focused") { it.currentFocus?.id==env.id("nexo_tv_result_actors") }
+            repeat(8) { env.key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
+            env.await(scenario,"Remote did not scroll cast") { (it.findViewById<RecyclerView>(env.id("nexo_tv_result_actors"))?.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)?.findFirstVisibleItemPosition()?.let { n -> n>0 }==true }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+            env.await(scenario,"Cannot leave cast for related items") { it.currentFocus?.tag=="${provider.name}\u0000${provider.mainUrl}/related?original=1" }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+            env.await(scenario,"Cannot return up to cast") { it.currentFocus?.id==env.id("nexo_tv_result_actors") }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/names-only",provider.name,"Names only") }
+            env.await(scenario,"Names-only fallback missing") { it.findViewById<TextView>(env.id("nexo_tv_result_actor_text"))?.text?.contains("No photo person")==true }
+            scenario.onActivity { a -> assertEquals(View.GONE,a.findViewById<View>(env.id("nexo_tv_result_actors")).visibility) }
+        } }
+    }
+    @Test fun recommendationsKeepOriginalPayloadAndRestoreFocus() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/supplemental",provider.name,"Supplemental fixture") }
+            env.await(scenario,"Related card missing") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_recommendations"))?.findViewHolderForAdapterPosition(0)!=null }
+            val key="${provider.name}\u0000${provider.mainUrl}/related?original=1"
+            scenario.onActivity { it.findViewById<RecyclerView>(env.id("nexo_tv_result_recommendations")).findViewHolderForAdapterPosition(0)!!.itemView.requestFocus() }
+            env.await(scenario,"Related card not focused") { it.currentFocus?.tag==key }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            env.await(scenario,"Original related URL was not loaded") { provider.loads.contains("${provider.mainUrl}/related?original=1") && it.findViewById<TextView>(env.id("nexo_tv_result_title"))?.text=="Movie fixture" }
+            env.key(android.view.KeyEvent.KEYCODE_BACK)
+            env.await(scenario,"Related origin focus not restored") { it.findViewById<TextView>(env.id("nexo_tv_result_title"))?.text=="Supplemental fixture" && it.currentFocus?.tag==key }
+        } }
     }
     private fun ownResultExists() {
         try { Class.forName("com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment") }

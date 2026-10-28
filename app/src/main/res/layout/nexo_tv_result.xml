@@ -114,9 +114,23 @@
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_episodes"
                     android:layout_width="match_parent" android:layout_height="260dp" android:layout_marginTop="12dp"
                     android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
+                <TextView android:id="@+id/nexo_tv_result_actor_title"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="@string/nexo_tv_details_cast" android:textSize="22sp" android:textStyle="bold"
+                    android:textColor="#FFFFFF" android:layout_marginTop="28dp" android:visibility="gone" />
+                <TextView android:id="@+id/nexo_tv_result_actor_text"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" android:textSize="14sp" android:textColor="#C4CBD8"
+                    android:lineSpacingExtra="3dp" android:visibility="gone" />
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_actors"
+                    android:layout_width="match_parent" android:layout_height="196dp" android:layout_marginTop="12dp"
+                    android:padding="8dp" android:clipToPadding="false" android:nestedScrollingEnabled="false"
+                    android:focusable="true" android:focusableInTouchMode="true" android:descendantFocusability="blocksDescendants"
+                    android:background="@drawable/nexo_tv_text_focus" android:contentDescription="@string/nexo_tv_details_cast_scroll"
+                    android:visibility="gone" />
                 <TextView android:id="@+id/nexo_tv_result_recommendation_title"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:text="@string/recommendations_tooltip" android:textSize="22sp" android:textStyle="bold"
+                    android:text="@string/lite_recommendations" android:textSize="22sp" android:textStyle="bold"
                     android:textColor="#FFFFFF" android:layout_marginTop="28dp" />
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_recommendations"
                     android:layout_width="match_parent" android:layout_height="252dp" android:layout_marginTop="12dp"
