@@ -123,10 +123,10 @@
                     android:layout_marginTop="12dp" android:textSize="14sp" android:textColor="#C4CBD8"
                     android:lineSpacingExtra="3dp" android:visibility="gone" />
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_actors"
-                    android:layout_width="match_parent" android:layout_height="196dp" android:layout_marginTop="12dp"
+                    android:layout_width="match_parent" android:layout_height="88dp" android:layout_marginTop="12dp"
                     android:padding="8dp" android:clipToPadding="false" android:nestedScrollingEnabled="false"
                     android:focusable="true" android:focusableInTouchMode="true" android:descendantFocusability="blocksDescendants"
-                    android:background="@drawable/nexo_tv_text_focus" android:contentDescription="@string/nexo_tv_details_cast_scroll"
+                    android:background="@drawable/nexo_tv_cast_scroll_focus" android:contentDescription="@string/nexo_tv_details_cast_scroll"
                     android:visibility="gone" />
                 <TextView android:id="@+id/nexo_tv_result_recommendation_title"
                     android:layout_width="match_parent" android:layout_height="wrap_content"

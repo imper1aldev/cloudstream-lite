@@ -109,12 +109,14 @@ class NexoTvDetailsVisualTest {
                     File(env.context.getExternalFilesDir(null),"details-$label-$kind.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
                 }
                 if(phase3) {
+                    await { it.currentFocus?.id==env.id("nexo_tv_result_play") }
                     await { it.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_actors"))?.adapter?.itemCount?.let { n -> n>0 }==true || it.findViewById<View>(env.id("nexo_tv_result_actor_text"))?.isShown==true }
                     scenario.onActivity { a ->
                         val row=a.findViewById<View>(env.id("nexo_tv_result_actors"))
                         if(row.isShown) row.requestFocus()
                         else a.findViewById<View>(env.id("nexo_tv_result_actor_text")).let { text -> text.parent.requestChildFocus(text,text) }
                     }
+                    await { a -> a.findViewById<View>(env.id("nexo_tv_result_actors"))?.let { !it.isShown || it.hasFocus() }==true }
                     env.instrumentation.waitForIdleSync();SystemClock.sleep(1500)
                     env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
                         File(env.context.getExternalFilesDir(null),"details-$label-$kind-cast.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
