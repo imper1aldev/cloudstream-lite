@@ -35,6 +35,12 @@ class NexoTvResultTest {
                 "series" -> newTvSeriesLoadResponse("Series fixture",url,TvType.TvSeries,
                     listOf(newEpisode("season-1-episode-1") { season=1; episode=1; name="First";runTime=2700;description="The first episode synopsis." },
                         newEpisode("season-2-episode-7") { season=2; episode=7; name="Seventh" }))
+                "emission-completed", "emission-ongoing", "large-text" -> newTvSeriesLoadResponse("Emission fixture",url,TvType.TvSeries,
+                    listOf(newEpisode("emission-episode") { season=1;episode=1;name="A very long episode title for readable enlarged text";description="A detailed episode description that must stay inside its card and remain visible with larger text.";runTime=2700 })) {
+                    showStatus=if(url.endsWith("emission-ongoing")) ShowStatus.Ongoing else ShowStatus.Completed
+                    actors=listOf(ActorData(Actor("An actor with a long name","file:///missing-person.png"),roleString="A character with a long name"))
+                    recommendations=listOf(newMovieSearchResponse("Related title","$mainUrl/movie",TvType.Movie))
+                }
                 "empty" -> newTvSeriesLoadResponse("Empty fixture",url,TvType.TvSeries,emptyList())
                 "many" -> newTvSeriesLoadResponse("Many seasons",url,TvType.TvSeries,(1..31).map { number -> newEpisode("many-$number") { season=number;episode=1;name="Season $number" } })
                 "range" -> newTvSeriesLoadResponse("Range fixture",url,TvType.TvSeries,(1..65).map { number -> newEpisode("range-$number") { season=1; episode=number; name="Range $number" } }) { plot=("A long synopsis for the TV layout. ").repeat(80) }
@@ -63,6 +69,90 @@ class NexoTvResultTest {
             }
             return false // No network or player unless a test explicitly supplies local PCM media.
         }
+    }
+    @Test fun emissionLabelsCannotBeMistakenForWatchCompletion() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            for(path in listOf("emission-completed","emission-ongoing","movie")) {
+                scenario.onActivity { it.loadResult("${provider.mainUrl}/$path",provider.name,"Emission fixture") }
+                env.await(scenario,"Play focus missing for $path") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+                scenario.onActivity { a ->
+                    val spanish=a.resources.configuration.locales[0].language=="es"
+                    val label=if(path=="emission-completed") (if(spanish) "Emision finalizada" else "Series ended") else (if(spanish) "En emision" else "Currently airing")
+                    val meta=a.findViewById<TextView>(env.id("nexo_tv_result_meta")).text.toString()
+                    val normalized=java.text.Normalizer.normalize(meta,java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}"),"")
+                    if(path=="movie") assertFalse("Movie gained an emission status",normalized.contains(if(spanish) "emision" else "airing",ignoreCase=true))
+                    else assertTrue("Emission label ambiguous: $meta",normalized.contains(label))
+                }
+            }
+        } }
+    }
+    @Test fun castRemoteHintTracksActualFocus() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/supplemental",provider.name,"Supplemental fixture") }
+            env.await(scenario,"Initial Play missing") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            scenario.onActivity { a ->
+                assertFalse(a.findViewById<View>(env.id("nexo_tv_result_actor_hint"))?.isShown==true)
+                a.findViewById<View>(env.id("nexo_tv_result_actors")).requestFocus()
+            }
+            env.await(scenario,"No visible remote scroll instruction") { it.findViewById<View>(env.id("nexo_tv_result_actor_hint"))?.isShown==true }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+            env.await(scenario,"Cast hint persisted after leaving its focus") { a -> !a.findViewById<View>(env.id("nexo_tv_result_actors")).hasFocus() && a.findViewById<View>(env.id("nexo_tv_result_actor_hint"))?.isShown!=true }
+        } }
+    }
+    @Test fun detailsActionsAnnounceButtonRoles() {
+        val provider=Provider()
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/supplemental",provider.name,"Supplemental fixture") }
+            env.await(scenario,"Play missing") { it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            scenario.onActivity { a ->
+                assertEquals("Play is exposed as text instead of a button",android.widget.Button::class.java.name,a.findViewById<View>(env.id("nexo_tv_result_play")).createAccessibilityNodeInfo().className)
+                assertTrue("Cast heading is not navigable as a heading",androidx.core.view.ViewCompat.isAccessibilityHeading(a.findViewById(env.id("nexo_tv_result_actor_title"))))
+            }
+        } }
+    }
+    @Test fun enlargedEpisodeAndCastTextStayInsideTheirCards() {
+        val provider=Provider()
+        fun doubleText(view:View) {
+            if(view is TextView) view.textSize=view.textSize/view.resources.displayMetrics.scaledDensity*2f
+            if(view is android.view.ViewGroup) for(i in 0 until view.childCount) doubleText(view.getChildAt(i))
+        }
+        fun fits(card:View,text:View):Boolean {
+            val rect=android.graphics.Rect(0,0,text.width,text.height)
+            (card as android.view.ViewGroup).offsetDescendantRectToMyCoords(text,rect)
+            return rect.bottom<=card.height-card.paddingBottom && rect.top>=card.paddingTop
+        }
+        NexoTvTestEnvironment(provider).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            env.await(scenario,"Home not ready") { it.findViewById<RecyclerView>(env.id("nexo_tv_home_list"))?.adapter?.itemCount?.let { n -> n>0 }==true }
+            scenario.onActivity { it.loadResult("${provider.mainUrl}/large-text",provider.name,"Emission fixture") }
+            env.await(scenario,"Episode not bound") { it.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes"))?.findViewHolderForAdapterPosition(0)!=null && it.currentFocus?.id==env.id("nexo_tv_result_play") }
+            scenario.onActivity { a ->
+                doubleText(a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView)
+                doubleText(a.findViewById<RecyclerView>(env.id("nexo_tv_result_actors")).findViewHolderForAdapterPosition(0)!!.itemView)
+            }
+            env.instrumentation.waitForIdleSync()
+            scenario.onActivity { a ->
+                val episode=a.findViewById<RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView
+                assertTrue("Enlarged episode description is clipped by its card",fits(episode,episode.findViewById(env.id("nexo_tv_episode_description"))))
+                val actor=a.findViewById<RecyclerView>(env.id("nexo_tv_result_actors")).findViewHolderForAdapterPosition(0)!!.itemView
+                assertTrue("Enlarged actor role is clipped by its card",fits(actor,actor.findViewById(env.id("nexo_tv_actor_role"))))
+                episode.requestFocus()
+            }
+            env.instrumentation.waitForIdleSync();SystemClock.sleep(600)
+            env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+                java.io.File(env.context.getExternalFilesDir(null),"details-polish-enlarged-episodes.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+            }
+            env.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+            env.await(scenario,"Enlarged cards block remote navigation") { it.findViewById<View>(env.id("nexo_tv_result_actors"))?.hasFocus()==true }
+            env.instrumentation.waitForIdleSync();SystemClock.sleep(600)
+            env.instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+                java.io.File(env.context.getExternalFilesDir(null),"details-polish-enlarged-cast.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+            }
+        } }
     }
     @Test fun emptySupplementalRowsAreSkipped() {
         val provider=Provider()

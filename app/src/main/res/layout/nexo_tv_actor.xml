@@ -1,6 +1,6 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="184dp" android:layout_height="64dp" android:layout_marginEnd="10dp"
+    android:layout_width="184dp" android:layout_height="wrap_content" android:minHeight="64dp" android:layout_marginEnd="10dp"
     android:orientation="horizontal" android:gravity="center_vertical" android:padding="8dp"
     android:background="@drawable/nexo_tv_card_background">
     <com.google.android.material.imageview.ShapeableImageView android:id="@+id/nexo_tv_actor_image"

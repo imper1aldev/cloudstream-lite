@@ -1,4 +1,8 @@
 <resources>
     <string name="nexo_tv_details_cast">Cast</string>
     <string name="nexo_tv_details_cast_scroll">Cast. Use left and right to scroll.</string>
+    <string name="nexo_tv_emission_completed">Series ended</string>
+    <string name="nexo_tv_emission_ongoing">Currently airing</string>
+    <string name="nexo_tv_emission_status">Broadcast: %1$s</string>
+    <string name="nexo_tv_details_scroll_hint">Scroll</string>
 </resources>

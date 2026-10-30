@@ -5,6 +5,10 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import com.lagradost.cloudstream3.utils.UiText
 import androidx.core.view.isVisible
 import androidx.core.view.children
 import androidx.core.view.doOnNextLayout
@@ -69,6 +73,20 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     override fun onViewCreated(view: View, state: Bundle?) {
         val ui = NexoTvResultBinding.bind(view)
         binding = ui; pendingFocus = true
+        val buttonSemantics = object : AccessibilityDelegateCompat() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = android.widget.Button::class.java.name
+            }
+        }
+        listOf(ui.nexoTvResultPlay, ui.nexoTvResultMore, ui.nexoTvResultSeason,
+            ui.nexoTvResultDub, ui.nexoTvResultRange, ui.nexoTvResultRetry).forEach {
+            ViewCompat.setAccessibilityDelegate(it, buttonSemantics)
+        }
+        listOf(ui.nexoTvResultTitle, ui.nexoTvResultEpisodeStatus,
+            ui.nexoTvResultActorTitle, ui.nexoTvResultRecommendationTitle).forEach {
+            ViewCompat.setAccessibilityHeading(it, true)
+        }
         // Hiding Play during metadata loading can move focus to Favorite automatically.
         // Only leaving for the menu cancels this initial/return restoration.
         cancelNexoTvPendingFocus(ui.root) { pendingFocus = false }
@@ -99,6 +117,9 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         actors = NexoTvActorAdapter()
         ui.nexoTvResultActors.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
         ui.nexoTvResultActors.adapter = actors
+        ui.nexoTvResultActors.setOnFocusChangeListener { _, focused ->
+            ui.nexoTvResultActorHint.isVisible = focused
+        }
         ui.nexoTvResultActors.setOnKeyListener { _, key, event ->
             if (event.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             val direction = when (key) {
@@ -134,10 +155,19 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
                     ui.nexoTvResultActorText.text = data.actorsText?.asString(requireContext())
                     ui.nexoTvResultActorText.isVisible = cast.isEmpty() && !ui.nexoTvResultActorText.text.isNullOrBlank()
                     ui.nexoTvResultActorTitle.isVisible = cast.isNotEmpty() || ui.nexoTvResultActorText.isVisible
+                    ui.nexoTvResultActorHeader.isVisible = ui.nexoTvResultActorTitle.isVisible
                     ui.nexoTvResultStatus.isVisible = false
                     ui.nexoTvResultTitle.text = data.title
-                    val metadata = listOfNotNull(data.yearText, data.durationText, data.ratingText, data.contentRatingText, data.onGoingText, data.nextAiringEpisode)
-                        .map { it.asString(requireContext()) }.filter { it.isNotBlank() }
+                    val emission = data.onGoingText?.let { status ->
+                        when ((status as? UiText.StringResource)?.resId) {
+                            R.string.status_completed -> getString(R.string.nexo_tv_emission_completed)
+                            R.string.status_ongoing -> getString(R.string.nexo_tv_emission_ongoing)
+                            else -> getString(R.string.nexo_tv_emission_status, status.asString(requireContext()))
+                        }
+                    }
+                    val metadata = (listOfNotNull(data.yearText, data.durationText, data.ratingText, data.contentRatingText)
+                        .map { it.asString(requireContext()) } + listOfNotNull(emission, data.nextAiringEpisode?.asString(requireContext())))
+                        .filter { it.isNotBlank() }
                     ui.nexoTvResultMeta.text = metadata.joinToString("  |  ")
                     ui.nexoTvResultMeta.isVisible = metadata.isNotEmpty()
                     populateChips(ui.nexoTvResultGenres, data.tags, R.style.NexoTvDetailsGenre)
