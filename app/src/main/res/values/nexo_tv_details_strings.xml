@@ -5,4 +5,5 @@
     <string name="nexo_tv_emission_ongoing">Currently airing</string>
     <string name="nexo_tv_emission_status">Broadcast: %1$s</string>
     <string name="nexo_tv_details_scroll_hint">Scroll</string>
+    <string name="nexo_tv_trailer_failed">The trailer could not be played. Go back to Details to try again.</string>
 </resources>

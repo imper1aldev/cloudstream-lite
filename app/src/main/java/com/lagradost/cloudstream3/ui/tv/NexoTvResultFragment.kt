@@ -4,6 +4,11 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.TextView
+import android.widget.LinearLayout
+import androidx.mediarouter.app.MediaRouteButton
+import com.google.android.gms.cast.framework.CastButtonFactory
+import com.google.android.gms.cast.framework.CastContext
+import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
@@ -48,6 +53,9 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
     private var playbackOrigin: TvFocusAnchor? = null
     private var pendingFocus = true
     private var comingSoon = false
+    private var secondaryTarget: ResultEpisode? = null
+    private var castRequested = false
+    private var castSetupFailed = false
     private var stored: ResultFragment.StoredData? = null
     private val update: (Int?) -> Unit = { model.reloadEpisodes() }
     private val library: (Boolean) -> Unit = { model.refreshFavorite() }
@@ -107,6 +115,12 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         stored = getStoredData() ?: return
         ui.root.viewTreeObserver.addOnGlobalFocusChangeListener(focusListener)
         ui.nexoTvResultRetry.setOnClickListener { load(false) }
+        ui.nexoTvResultTrailer.setOnClickListener {
+            if (model.trailers.value.orEmpty().tvTrailerLinks().isNotEmpty() && childFragmentManager.findFragmentByTag("nexo_tv_trailer") == null) {
+                NexoTvTrailerDialog().show(childFragmentManager, "nexo_tv_trailer")
+            }
+        }
+        ui.nexoTvResultMoreActions.setOnClickListener { showSecondaryActions() }
         ui.nexoTvResultFavorite.setOnClickListener { model.toggleFavoriteStatus(context) }
         episodes = NexoTvEpisodeAdapter(
             { rememberPlaybackOrigin(it); model.handleAction(EpisodeClickEvent(ACTION_CLICK_DEFAULT, it)) },
@@ -197,6 +211,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
                 else -> { ui.nexoTvResultStatus.isVisible = true; ui.nexoTvResultRetry.isVisible = false }
             }
         }
+        model.trailers.observe(viewLifecycleOwner) { refreshSecondaryActions() }
         model.movie.observe(viewLifecycleOwner) { refreshPlay() }
         model.resumeWatching.observe(viewLifecycleOwner) { refreshPlay() }
         model.episodes.observe(viewLifecycleOwner) { resource ->
@@ -269,6 +284,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         val last = eps.indexOfLast { it.getWatchProgress() >= NEXT_WATCH_EPISODE_PERCENTAGE / 100.0f || it.videoWatchState == VideoWatchState.Watched }
         val resume = model.resumeWatching.value
         val target = resume?.result ?: movie ?: eps.getOrElse(last + 1) { eps.firstOrNull() }
+        secondaryTarget = target?.takeUnless { comingSoon }
         ui.nexoTvResultResume.isVisible = resume != null && !comingSoon
         if (resume != null) {
             ui.nexoTvResultResumeTitle.text = if (resume.isMovie) (model.page.value as? Resource.Success)?.value?.title
@@ -292,8 +308,61 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         ui.nexoTvResultPlay.text = getString(if (resume != null) R.string.resume else R.string.lite_play)
         ui.nexoTvResultPlay.setOnClickListener { playbackOrigin = null; target?.let { model.handleAction(EpisodeClickEvent(if (resume != null) stored?.playerAction ?: ACTION_CLICK_DEFAULT else ACTION_CLICK_DEFAULT, it)) } }
         ui.nexoTvResultPlay.setOnLongClickListener { playbackOrigin = null; target?.let { model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, it)) }; true }
+        refreshSecondaryActions()
         restoreFocus()
     }
+    private fun canChooseCast(): Boolean = !castSetupFailed && model.currentRepo?.api?.hasChromecastSupport == true && context?.isCastApiAvailable() == true
+    private fun refreshSecondaryActions() {
+        val ui = binding ?: return
+        val trailer = model.trailers.value.orEmpty().tvTrailerLinks().isNotEmpty()
+        val more = secondaryTarget != null || canChooseCast()
+        if ((!trailer && ui.nexoTvResultTrailer.hasFocus()) || (!more && ui.nexoTvResultMoreActions.hasFocus())) {
+            (ui.nexoTvResultPlay.takeIf { it.isShown } ?: ui.nexoTvResultFavorite).requestFocus()
+        }
+        ui.nexoTvResultTrailer.isVisible = trailer
+        ui.nexoTvResultMoreActions.isVisible = more
+        if (!castRequested && model.currentRepo?.api?.hasChromecastSupport == true) {
+            castRequested = true
+            runCatching {
+                CastContext.getSharedInstance(requireContext()) { it.run() }.addOnCompleteListener {
+                    if (binding === ui) refreshSecondaryActions()
+                }
+            }
+        }
+    }
+    private fun showSecondaryActions() {
+        val ui = binding ?: return
+        val target = secondaryTarget
+        val castButton = if (canChooseCast()) runCatching {
+            MediaRouteButton(requireContext()).apply {
+                CastButtonFactory.setUpMediaRouteButton(requireContext(), this)
+                setAlwaysVisible(true)
+                contentDescription = getString(R.string.lite_cast_action)
+                isFocusable = true
+            }
+        }.getOrElse { castSetupFailed = true; null } else null
+        if (target == null && castButton == null) { refreshSecondaryActions(); return }
+        selection?.dismiss()
+        val builder = AlertDialog.Builder(requireContext()).setTitle(R.string.lite_more_actions)
+        if (target != null) builder.setItems(arrayOf(getString(R.string.lite_options))) { _, _ ->
+            playbackOrigin = null
+            model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, target))
+        }
+        if (castButton != null) {
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(24.toPx(), 8.toPx(), 24.toPx(), 16.toPx())
+                addView(TextView(context).apply { text = getString(R.string.lite_cast_action); textSize = 17f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(castButton, LinearLayout.LayoutParams(52.toPx(), 52.toPx()))
+            }
+            builder.setView(row)
+        }
+        selection = builder.create().apply {
+            setOnDismissListener { if (binding === ui && isResumed && ui.nexoTvResultMoreActions.isShown) ui.nexoTvResultMoreActions.requestFocus() }
+            show()
+        }
+    }
+    private fun Int.toPx(): Int = (this * resources.displayMetrics.density).toInt()
     private fun rememberPlaybackOrigin(episode: ResultEpisode) {
         playbackOrigin = TvFocusAnchor("episode", episode.tvEpisodeKey, episodes?.currentList?.indexOf(episode)?.coerceAtLeast(0) ?: 0)
     }
@@ -349,7 +418,7 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
             } else ui.root.doOnNextLayout { if (binding === ui) restoreFocus() }
         }
     }
-    override fun onResume() { super.onResume(); MainActivity.afterPluginsLoadedEvent += plugins; restoreFocus() }
+    override fun onResume() { super.onResume(); MainActivity.afterPluginsLoadedEvent += plugins; refreshSecondaryActions(); restoreFocus() }
     override fun onStop() {
         // A transition/season animation can move focus before onPause. Restore the action's origin,
         // rather than that transient focus, only when handing off to the native player.

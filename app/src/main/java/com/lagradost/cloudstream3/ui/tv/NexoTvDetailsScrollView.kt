@@ -11,7 +11,8 @@ import com.lagradost.cloudstream3.R
 class NexoTvDetailsScrollView(context: Context, attrs: AttributeSet?) : NestedScrollView(context, attrs) {
     override fun requestChildRectangleOnScreen(child: View, rectangle: Rect, immediate: Boolean): Boolean {
         val heroAction = when (findFocus()?.id) {
-            R.id.nexo_tv_result_play, R.id.nexo_tv_result_favorite, R.id.nexo_tv_result_more -> true
+            R.id.nexo_tv_result_play, R.id.nexo_tv_result_favorite, R.id.nexo_tv_result_more,
+            R.id.nexo_tv_result_trailer, R.id.nexo_tv_result_more_actions -> true
             else -> false
         }
         // centerView asks for a screen-height rectangle; native focus only asks for the control.

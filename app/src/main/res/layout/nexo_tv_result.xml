@@ -92,7 +92,17 @@
                                 android:contentDescription="@string/favorite"
                                 app:srcCompat="@drawable/ic_baseline_favorite_border_24"
                                 app:tint="@color/nexo_tv_details_action_tint" />
-                            <!-- Secondary actions remain hidden until their phase connects real callbacks. -->
+                            <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/nexo_tv_result_trailer"
+                                android:layout_width="52dp" android:layout_height="52dp" android:layout_marginStart="12dp"
+                                android:padding="14dp" android:scaleType="fitCenter" android:focusable="true"
+                                android:background="@drawable/nexo_tv_details_secondary" android:contentDescription="@string/trailer"
+                                app:srcCompat="@drawable/ic_baseline_ondemand_video_24" app:tint="@color/nexo_tv_details_action_tint" android:visibility="gone" />
+                            <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/nexo_tv_result_more_actions"
+                                android:layout_width="52dp" android:layout_height="52dp" android:layout_marginStart="12dp"
+                                android:padding="14dp" android:scaleType="fitCenter" android:focusable="true"
+                                android:background="@drawable/nexo_tv_details_secondary" android:contentDescription="@string/lite_more_actions"
+                                app:srcCompat="@drawable/ic_baseline_more_vert_24" app:tint="@color/nexo_tv_details_action_tint" android:visibility="gone" />
+                            <!-- Standalone download/cast buttons are not part of this TV layout. -->
                             <TextView android:id="@+id/nexo_tv_result_cast" style="@style/NexoTvAction"
                                 android:text="@string/lite_cast_action" android:visibility="gone" />
                             <TextView android:id="@+id/nexo_tv_result_download" style="@style/NexoTvAction"

@@ -20,6 +20,7 @@ class LiteRealPlayerSwitchTest {
         val clients = CopyOnWriteArrayList<Socket>()
         val stop = CountDownLatch(1)
         val requests = CopyOnWriteArrayList<String>()
+        val requestHeaders = CopyOnWriteArrayList<List<String>>()
         private val media = ByteBuffer.allocate(44 + 60 * 16000).order(ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray());putInt(capacity()-8);put("WAVEfmt ".toByteArray());putInt(16)
             putShort(1);putShort(1);putInt(8000);putInt(16000);putShort(2);putShort(16)
@@ -34,9 +35,12 @@ class LiteRealPlayerSwitchTest {
                     val first=reader.readLine() ?: return@use
                     val path=first.split(' ').getOrNull(1).orEmpty();requests.add(path)
                     var offset=0
+                    val headers=mutableListOf<String>()
                     while(true) { val line=reader.readLine() ?: break; if(line.isEmpty())break
+                        headers.add(line)
                         if(line.startsWith("Range:",true))offset=Regex("bytes=(\\d+)").find(line)?.groupValues?.get(1)?.toInt() ?: 0
                     }
+                    requestHeaders.add(headers)
                     if(path=="/wait") { stop.await();return@use }
                     val output=it.getOutputStream()
                     if(path=="/fail") { output.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray());output.flush();return@use }
