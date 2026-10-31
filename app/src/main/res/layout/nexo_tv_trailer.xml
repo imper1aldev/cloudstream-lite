@@ -8,7 +8,7 @@
         android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center"
         android:padding="48dp" android:text="@string/nexo_tv_trailer_failed"
         android:textSize="20sp" android:textColor="#FFFFFF" android:visibility="gone" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+    <LinearLayout android:id="@+id/nexo_tv_trailer_header" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="48dp"
         android:paddingEnd="48dp" android:paddingTop="27dp" android:paddingBottom="16dp" android:background="#B3000000">
         <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/nexo_tv_trailer_close"

@@ -165,7 +165,6 @@ class NexoTvSecondaryActionsTest {
             open(env,s,p)
             env.await(s,"More missing with native options") { it.findViewById<View>(env.id("nexo_tv_result_more_actions"))?.isShown==true }
             s.onActivity { a -> assertFalse(a.findViewById<View>(env.id("nexo_tv_result_trailer"))?.isShown==true);a.findViewById<View>(env.id("nexo_tv_result_more_actions")).apply { requestFocus();performClick() } }
-            LiteUiAutomation.clickLabel(env.context.getString(R.string.lite_options))
             env.await(s,"Original option menu did not open") { labels(env).contains(env.context.getString(R.string.episode_action_play_in_app)) }
             assertFalse(labels(env).contains(env.context.getString(R.string.lite_cast_action)))
             env.key(android.view.KeyEvent.KEYCODE_BACK)
@@ -174,6 +173,66 @@ class NexoTvSecondaryActionsTest {
             env.await(s,"Soon page missing") { (model(it).page.value as? Resource.Success)?.value?.comingSoon==true }
             s.onActivity { assertFalse("Empty More is visible",it.findViewById<View>(env.id("nexo_tv_result_more_actions"))?.isShown==true) }
         } }
+    }
+    @Test fun trailerControlsRespectTvMarginsAndFullVideoViewport() {
+        LiteRealPlayerSwitchTest.MediaServer().use { server ->
+            val p=Provider(server.url("bounds.wav"))
+            NexoTvTestEnvironment(p).use { env -> ActivityScenario.launch(MainActivity::class.java).use { s ->
+                open(env,s,p);pressTrailer(env,s)
+                env.await(s,"Trailer view missing") { trailerPlayer(it)!=null }
+                env.instrumentation.waitForIdleSync()
+                s.onActivity { a ->
+                    val root=dialog(a)!!.requireView();val density=a.resources.displayMetrics.density
+                    val video=root.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
+                    val full=android.graphics.Rect();val content=android.graphics.Rect()
+                    root.getGlobalVisibleRect(full);video.getGlobalVisibleRect(content)
+                    assertEquals("Safe margins shrank the video",full,content)
+                    for(id in listOf(androidx.media3.ui.R.id.exo_bottom_bar,androidx.media3.ui.R.id.exo_progress)) {
+                        val v=root.findViewById<View>(id);val bounds=android.graphics.Rect()
+                        assertTrue("Native controls hidden",v.getGlobalVisibleRect(bounds))
+                        assertTrue("Control reaches left TV edge",bounds.left>=full.left+(48*density).toInt())
+                        assertTrue("Control reaches right TV edge",bounds.right<=full.right-(48*density).toInt())
+                        assertTrue("Control reaches bottom TV edge",bounds.bottom<=full.bottom-(27*density).toInt())
+                    }
+                }
+                capture(env,"phase4-polish-safe-controls.png")
+                env.key(android.view.KeyEvent.KEYCODE_BACK)
+                env.await(s,"Safe controller cannot return to Details") { dialog(it)==null && it.currentFocus?.id==env.id("nexo_tv_result_trailer") }
+            } }
+        }
+    }
+    @Test fun trailerHeaderFollowsControlsAndKeepsFocusedExitVisible() {
+        LiteRealPlayerSwitchTest.MediaServer().use { server ->
+            val p=Provider(server.url("chrome.wav"))
+            NexoTvTestEnvironment(p).use { env ->
+                val paused=com.lagradost.cloudstream4.AppSettings(env.context).player.startPaused;val old=paused.get();paused.set(false)
+                try { ActivityScenario.launch(MainActivity::class.java).use { s ->
+                    open(env,s,p);pressTrailer(env,s)
+                    env.await(s,"Trailer not playing") { trailerPlayer(it)?.isPlaying==true }
+                    env.await(s,"Header stayed visible after controller timeout") { a ->
+                        val root=dialog(a)?.view
+                        root?.findViewById<View>(env.id("nexo_tv_trailer_close"))?.isShown==false &&
+                            root.findViewById<androidx.media3.ui.PlayerView>(env.id("nexo_tv_trailer_player"))?.isControllerFullyVisible==false
+                    }
+                    capture(env,"phase4-polish-chrome-hidden.png")
+                    env.key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+                    env.await(s,"Remote did not reveal trailer header") { dialog(it)?.view?.findViewById<View>(env.id("nexo_tv_trailer_close"))?.isShown==true }
+                    s.onActivity { a ->
+                        val root=dialog(a)!!.requireView()
+                        assertTrue(root.findViewById<View>(env.id("nexo_tv_trailer_close")).requestFocus())
+                        root.findViewById<androidx.media3.ui.PlayerView>(env.id("nexo_tv_trailer_player")).hideController()
+                    }
+                    env.instrumentation.waitForIdleSync()
+                    s.onActivity { a ->
+                        val close=dialog(a)!!.requireView().findViewById<View>(env.id("nexo_tv_trailer_close"))
+                        assertTrue("Focused exit was hidden",close.isShown && close.hasFocus())
+                    }
+                    env.key(android.view.KeyEvent.KEYCODE_BACK)
+                    env.await(s,"Hidden controller changed Back behavior") { dialog(it)==null && it.currentFocus?.id==env.id("nexo_tv_result_trailer") }
+                    assertTrue(p.extracts.isEmpty())
+                } } finally { paused.set(old) }
+            }
+        }
     }
     @Test fun castOnlyMoreMatchesNativeAvailability() {
         val p=Provider(cast=true)

@@ -69,6 +69,17 @@ class NexoTvTrailerDialog : DialogFragment() {
     override fun onViewCreated(view: View, state: Bundle?) {
         val ui = binding ?: return
         ui.nexoTvTrailerClose.setOnClickListener { dismiss() }
+        // Inset only the controls; the video surface remains full screen.
+        val density = resources.displayMetrics.density
+        ui.nexoTvTrailerPlayer.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
+            .setPadding((48 * density).toInt(), (27 * density).toInt(), (48 * density).toInt(), (27 * density).toInt())
+        ui.nexoTvTrailerPlayer.setControllerVisibilityListener(androidx.media3.ui.PlayerView.ControllerVisibilityListener { visibility ->
+            ui.nexoTvTrailerHeader.isVisible = visibility == View.VISIBLE || ui.nexoTvTrailerError.isVisible || ui.nexoTvTrailerClose.hasFocus()
+        })
+        ui.nexoTvTrailerClose.setOnFocusChangeListener { _, focused ->
+            if (focused) ui.nexoTvTrailerPlayer.showController()
+            else ui.nexoTvTrailerHeader.isVisible = ui.nexoTvTrailerPlayer.isControllerFullyVisible || ui.nexoTvTrailerError.isVisible
+        }
         val model = ViewModelProvider(requireParentFragment())[ResultViewModel2::class.java]
         links = model.trailers.value.orEmpty().tvTrailerLinks()
         if (links.isEmpty()) showFailure()
@@ -86,7 +97,11 @@ class NexoTvTrailerDialog : DialogFragment() {
         current.initCallbacks({ event ->
             if (engine === current && binding === ui) when (event) {
                 is PlayerAttachedEvent -> ui.nexoTvTrailerPlayer.player = event.player as? Player
-                is RequestAudioFocusEvent -> requestAudioFocus()
+                is RequestAudioFocusEvent -> {
+                    requestAudioFocus()
+                    // Start the native hide timeout after the initial loading/attachment transitions.
+                    ui.root.post { if (engine === current && binding === ui) ui.nexoTvTrailerPlayer.showController() }
+                }
                 is ErrorEvent -> ui.root.post {
                     if (engine === current && binding === ui) {
                         if (mirror + 1 < links.size) loadMirror(mirror + 1) else showFailure()
@@ -103,6 +118,7 @@ class NexoTvTrailerDialog : DialogFragment() {
         releaseAudioFocus()
         ui.nexoTvTrailerPlayer.player = null
         ui.nexoTvTrailerError.isVisible = true
+        ui.nexoTvTrailerHeader.isVisible = true
         ui.nexoTvTrailerClose.post { if (binding === ui) ui.nexoTvTrailerClose.requestFocus() }
     }
     override fun onStart() {
@@ -140,6 +156,7 @@ class NexoTvTrailerDialog : DialogFragment() {
         super.onSaveInstanceState(out)
     }
     override fun onDestroyView() {
+        binding?.nexoTvTrailerPlayer?.setControllerVisibilityListener(null as androidx.media3.ui.PlayerView.ControllerVisibilityListener?)
         binding?.nexoTvTrailerPlayer?.player = null
         binding = null
         engine?.releaseCallbacks(); engine?.release(); engine = null

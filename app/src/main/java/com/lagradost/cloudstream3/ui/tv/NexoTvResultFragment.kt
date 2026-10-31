@@ -343,6 +343,11 @@ class NexoTvResultFragment : Fragment(R.layout.nexo_tv_result) {
         }.getOrElse { castSetupFailed = true; null } else null
         if (target == null && castButton == null) { refreshSecondaryActions(); return }
         selection?.dismiss()
+        if (target != null && castButton == null) {
+            playbackOrigin = null
+            model.handleAction(EpisodeClickEvent(ACTION_SHOW_OPTIONS, target))
+            return
+        }
         val builder = AlertDialog.Builder(requireContext()).setTitle(R.string.lite_more_actions)
         if (target != null) builder.setItems(arrayOf(getString(R.string.lite_options))) { _, _ ->
             playbackOrigin = null
