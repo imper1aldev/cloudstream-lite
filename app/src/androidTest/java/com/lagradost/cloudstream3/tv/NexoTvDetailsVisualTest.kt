@@ -58,6 +58,7 @@ class NexoTvDetailsVisualTest {
     }
     @Test fun captureMovieAndSeriesDetails() {
         val label=InstrumentationRegistry.getArguments().getString("nexo_details_capture") ?: "preview"
+        val phase5=InstrumentationRegistry.getArguments().getString("nexo_details_phase5")=="true"
         val phase3=InstrumentationRegistry.getArguments().getString("nexo_details_phase3")=="true"
         val phase2=InstrumentationRegistry.getArguments().getString("nexo_details_phase2")=="true"
         NexoTvTestEnvironment().use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -84,6 +85,20 @@ class NexoTvDetailsVisualTest {
                 scenario.onActivity { it.loadResult(match.url,match.apiName,match.name) }
                 await { a -> (model(a)?.page?.value as? Resource.Success)?.value?.url==match.url && a.findViewById<View>(env.id("nexo_tv_result_play"))?.isShown==true }
                 await { it.findViewById<ImageView>(env.id("nexo_tv_result_backdrop"))?.drawable!=null }
+                if(phase5) {
+                    await { it.currentFocus?.id==env.id("nexo_tv_result_play") && model(it)?.favoriteStatus?.value!=null }
+                    var favorite=false
+                    scenario.onActivity { a -> favorite=model(a)?.favoriteStatus?.value==true;a.findViewById<View>(env.id("nexo_tv_result_favorite")).apply { requestFocus();performClick() } }
+                    await { model(it)?.favoriteStatus?.value==!favorite }
+                    scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_result_favorite")).performClick() }
+                    await { model(it)?.favoriteStatus?.value==favorite }
+                    var hasMore=false
+                    scenario.onActivity { a -> hasMore=a.findViewById<View>(env.id("nexo_tv_result_more")).isShown }
+                    if(hasMore) {
+                        scenario.onActivity { a -> a.findViewById<View>(env.id("nexo_tv_result_more")).apply { requestFocus();performClick() } }
+                        env.instrumentation.waitForIdleSync();env.key(android.view.KeyEvent.KEYCODE_BACK)
+                    }
+                }
                 if(phase2 && kind=="series") {
                     await { (model(it)?.episodes?.value as? Resource.Success)?.value?.isNotEmpty()==true }
                     // Synthetic watch progress only in this temporary profile, not actual viewing history.
@@ -140,4 +155,40 @@ class NexoTvDetailsVisualTest {
             }
         } }
     }
+    @Test fun realLongAnimeRangesAndRemoteReturn() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("nexo_details_phase5")=="true")
+        NexoTvTestEnvironment().use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var activity:MainActivity?=null;scenario.onActivity { activity=it }
+            check(runBlocking(Dispatchers.IO) { withTimeout(90_000) { ensureAllowedProvider(checkNotNull(activity)) } })
+            val api=checkNotNull(APIHolder.getApiFromNameNull("NexoStream"))
+            val matches=runBlocking(Dispatchers.IO) { withTimeout(60_000) { checkNotNull(api.search("One Piece",1)).items } }
+            val match=matches.first { when(it) { is AnimeSearchResponse -> it.year==1999;is TvSeriesSearchResponse -> it.year==1999;else -> false } }
+            fun model(a:MainActivity):ResultViewModel2? {
+                val f=(a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).childFragmentManager.primaryNavigationFragment
+                return f?.takeIf { it is com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment }?.let { ViewModelProvider(it)[ResultViewModel2::class.java] }
+            }
+            fun await(condition:(MainActivity)->Boolean) {
+                val end=SystemClock.elapsedRealtime()+90_000
+                while(SystemClock.elapsedRealtime()<end) { var done=false;scenario.onActivity { done=condition(it) };if(done)return;SystemClock.sleep(100) }
+                error("Real long anime journey timed out")
+            }
+            scenario.onActivity { it.loadResult(match.url,match.apiName,match.name) }
+            await { a -> (model(a)?.page?.value as? Resource.Success)?.value?.url==match.url && a.currentFocus?.id==env.id("nexo_tv_result_play") && (model(a)?.rangeSelections?.value?.size ?: 0)>1 }
+            scenario.onActivity { a -> a.findViewById<View>(env.id("nexo_tv_result_range")).apply { requestFocus();performClick() } }
+            env.instrumentation.waitForIdleSync();env.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN);env.key(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            await { (model(it)?.selectedRangeIndex?.value ?: 0)>0 }
+            scenario.onActivity { a -> a.findViewById<androidx.recyclerview.widget.RecyclerView>(env.id("nexo_tv_result_episodes")).findViewHolderForAdapterPosition(0)!!.itemView.requestFocus() }
+            env.instrumentation.waitForIdleSync();SystemClock.sleep(700)
+            env.instrumentation.uiAutomation.takeScreenshot().let { bitmap -> File(env.context.getExternalFilesDir(null),"details-phase5-anime-episodes.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle() }
+            scenario.onActivity { a -> a.findViewById<View>(env.id("nexo_tv_result_play")).requestFocus() }
+            env.instrumentation.waitForIdleSync();SystemClock.sleep(700)
+            scenario.onActivity { a ->
+                val title=a.findViewById<View>(env.id("nexo_tv_result_title"));val r=android.graphics.Rect()
+                check(title.getGlobalVisibleRect(r) && r.height()==title.height)
+                File(env.context.getExternalFilesDir(null),"details-phase5-anime.json").writeText(org.json.JSONObject().put("title",match.name).put("url",match.url).put("rangeCount",model(a)?.rangeSelections?.value?.size).put("selectedRange",model(a)?.selectedRangeIndex?.value).put("dubCount",model(a)?.dubSubSelections?.value?.size).toString(2))
+            }
+            env.instrumentation.uiAutomation.takeScreenshot().let { bitmap -> File(env.context.getExternalFilesDir(null),"details-phase5-anime-hero.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle() }
+        } }
+    }
+
 }

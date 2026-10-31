@@ -11,8 +11,8 @@
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:paddingBottom="36dp">
 
-            <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:minHeight="410dp">
+            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/nexo_tv_result_hero"
+                android:layout_width="match_parent" android:layout_height="wrap_content">
                 <ImageView android:id="@+id/nexo_tv_result_backdrop"
                     android:layout_width="0dp" android:layout_height="0dp"
                     app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
@@ -28,7 +28,7 @@
                     app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
                     android:paddingStart="48dp" android:paddingEnd="48dp"
-                    android:paddingTop="40dp" android:paddingBottom="32dp">
+                    android:paddingTop="40dp" android:paddingBottom="24dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
                         android:orientation="vertical"
                         app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"
@@ -116,7 +116,7 @@
                 android:orientation="vertical" android:paddingStart="48dp" android:paddingEnd="48dp">
                 <LinearLayout android:id="@+id/nexo_tv_result_episode_controls"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:layout_marginTop="16dp" android:visibility="gone">
+                    android:orientation="horizontal" android:layout_marginTop="8dp" android:visibility="gone">
                     <TextView android:id="@+id/nexo_tv_result_season" style="@style/NexoTvDetailsSelector" android:visibility="gone" />
                     <TextView android:id="@+id/nexo_tv_result_dub" style="@style/NexoTvDetailsSelector" android:visibility="gone" />
                     <TextView android:id="@+id/nexo_tv_result_range" style="@style/NexoTvDetailsSelector" android:visibility="gone" />
@@ -125,7 +125,7 @@
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:textSize="22sp" android:textStyle="bold" android:textColor="#FFFFFF" android:layout_marginTop="12dp" />
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_result_episodes"
-                    android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="260dp" android:layout_marginTop="12dp"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"
                     android:clipChildren="false" android:clipToPadding="false" android:padding="8dp" android:nestedScrollingEnabled="false" />
                 <LinearLayout android:id="@+id/nexo_tv_result_actor_header"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
