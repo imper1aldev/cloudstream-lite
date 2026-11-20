@@ -15,11 +15,12 @@ import kotlin.concurrent.thread
 
 /** Local PCM media exercises the actual CS3IPlayer/Media3 lifecycle, not an IPlayer proxy. */
 class LiteRealPlayerSwitchTest {
-    private class MediaServer : AutoCloseable {
+    internal class MediaServer : AutoCloseable {
         val socket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
         val clients = CopyOnWriteArrayList<Socket>()
         val stop = CountDownLatch(1)
         val requests = CopyOnWriteArrayList<String>()
+        val requestHeaders = CopyOnWriteArrayList<List<String>>()
         private val media = ByteBuffer.allocate(44 + 60 * 16000).order(ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray());putInt(capacity()-8);put("WAVEfmt ".toByteArray());putInt(16)
             putShort(1);putShort(1);putInt(8000);putInt(16000);putShort(2);putShort(16)
@@ -34,9 +35,12 @@ class LiteRealPlayerSwitchTest {
                     val first=reader.readLine() ?: return@use
                     val path=first.split(' ').getOrNull(1).orEmpty();requests.add(path)
                     var offset=0
+                    val headers=mutableListOf<String>()
                     while(true) { val line=reader.readLine() ?: break; if(line.isEmpty())break
+                        headers.add(line)
                         if(line.startsWith("Range:",true))offset=Regex("bytes=(\\d+)").find(line)?.groupValues?.get(1)?.toInt() ?: 0
                     }
+                    requestHeaders.add(headers)
                     if(path=="/wait") { stop.await();return@use }
                     val output=it.getOutputStream()
                     if(path=="/fail") { output.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray());output.flush();return@use }
@@ -106,6 +110,16 @@ class LiteRealPlayerSwitchTest {
         assertTrue("Failed source was not recorded",f.vm.state.erroredLinks.isNotEmpty())
         f.finish()
         assertTrue(state(f) { it.playWhenReady })
+    }
+    @Test fun automaticHttpRetryStillAllowsFinalUpgradeAndPreservesPosition() = real { f,server ->
+        f.emit("LAT",quality=2160,url=server.url("fail"))
+        f.emit("LAT",quality=720,url=server.url("good"))
+        f.await(12000) { state(f) { it.isPlaying && it.currentMediaItem?.localConfiguration?.uri?.path=="/good" && it.currentPosition>1200 } }
+        assertTrue("HTTP failure was not recorded",f.vm.state.erroredLinks.isNotEmpty())
+        var before=0L;f.scenario.onActivity { before=f.fragment.playerView!!.player!!.currentPosition }
+        f.emit("LAT",quality=1080,url=server.url("better"));f.finish()
+        f.await(8000) { state(f) { it.isPlaying && it.currentMediaItem?.localConfiguration?.uri?.path=="/better" } }
+        assertTrue("Automatic retry upgrade lost position or playing intent",state(f) { it.playWhenReady && it.currentPosition>=before-500 })
     }
     @Test fun stalledAutomaticSourceUsesAvailableLatBeforeExtractionFinishes() = real { f,server ->
         f.emit("LAT",quality=2160,url=server.url("wait"))

@@ -1,0 +1,13 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/nexo_tv_landscape_width" android:layout_height="wrap_content"
+    android:layout_margin="@dimen/nexo_tv_card_gap" android:padding="4dp"
+    android:background="@drawable/nexo_tv_card_background" android:orientation="vertical"
+    android:focusable="true" android:clickable="true" android:focusableInTouchMode="true">
+    <ImageView android:id="@+id/nexo_tv_card_image" android:layout_width="match_parent"
+        android:layout_height="@dimen/nexo_tv_landscape_height" android:scaleType="centerCrop"
+        android:importantForAccessibility="no" />
+    <TextView android:id="@+id/nexo_tv_card_title" android:layout_width="match_parent"
+        android:layout_height="44dp" android:gravity="center_vertical" android:maxLines="2"
+        android:ellipsize="end" android:textSize="15sp" android:textColor="#F1F2F6"
+        android:paddingHorizontal="3dp" android:paddingTop="4dp" />
+</LinearLayout>

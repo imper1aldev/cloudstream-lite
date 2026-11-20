@@ -111,6 +111,7 @@ import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+import com.lagradost.cloudstream3.ui.settings.SettingsFragmentScreen.launchSafe
 import com.lagradost.cloudstream3.ui.subtitles.SUBTITLE_AUTO_SELECT_KEY
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.getAutoSelectLanguageTagIETF
@@ -198,7 +199,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     private var liteMetricsInstance: Int? = null
     private var liteNetworkEpoch: Long? = null
     private fun isLitePlayback(): Boolean = ::viewModel.isInitialized &&
-        usesLitePlayback(isLayout(PHONE), viewModel.state.generatorState?.response?.apiName)
+        usesLitePlayback(isLayout(PHONE or TV), viewModel.state.generatorState?.response?.apiName)
     private var litePlaybackInstance: Int? = null
     private var liteAwaitingRecovery = false
     private var liteFinalChoiceMade = false
@@ -1020,23 +1021,19 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     private fun openSubPicker() {
-        try {
-            subsPathPicker.launch(
-                arrayOf(
-                    "text/plain",
-                    "text/str",
-                    "application/octet-stream",
-                    MimeTypes.TEXT_UNKNOWN,
-                    MimeTypes.TEXT_VTT,
-                    MimeTypes.TEXT_SSA,
-                    MimeTypes.APPLICATION_TTML,
-                    MimeTypes.APPLICATION_MP4VTT,
-                    MimeTypes.APPLICATION_SUBRIP,
-                )
+        subsPathPicker.launchSafe(
+            arrayOf(
+                "text/plain",
+                "text/str",
+                "application/octet-stream",
+                MimeTypes.TEXT_UNKNOWN,
+                MimeTypes.TEXT_VTT,
+                MimeTypes.TEXT_SSA,
+                MimeTypes.APPLICATION_TTML,
+                MimeTypes.APPLICATION_MP4VTT,
+                MimeTypes.APPLICATION_SUBRIP,
             )
-        } catch (e: Exception) {
-            logError(e)
-        }
+        )
     }
 
     @MainThread
@@ -1302,7 +1299,8 @@ class GeneratorPlayer : FullScreenPlayer() {
                     // Always display current linkFooter
                     val sortedLinks = if (isLitePlayback()) orderedPlaybackLinks() else viewModel.state.sortLinks(qualityProfile)
 
-                    filteredLinks = sortedLinks.filter { it.shouldUseLink || it.link == currentLinkUsed }
+                    filteredLinks =
+                        sortedLinks.filter { it.shouldUseLink || it.link == currentLinkUsed }
 
                     searchingFooter?.isVisible = viewModel.state.loading is Resource.Loading
                     sourceDialog.findViewById<LinearLayout>(R.id.sort_sources_holder)?.isGone =
@@ -1788,19 +1786,7 @@ class GeneratorPlayer : FullScreenPlayer() {
             viewModel.modifyState { this.addError(link) }
         }
 
-        val currentUrl =
-            currentSelectedLink?.let { it.first?.url ?: it.second?.uri?.toString() } ?: "unknown"
-        val headers = currentSelectedLink?.first?.headers?.toString() ?: "none"
-        val referer = currentSelectedLink?.first?.referer ?: "none"
-        Log.e(
-            TAG,
-            "playerError: $currentSelectedLink, " +
-                    "type=${exception::class.qualifiedName}, " +
-                    "message=${exception.message}, url=$currentUrl, headers=$headers, " +
-                    "referer=$referer, position=${player.getPosition() ?: "unknown"}, " +
-                    "duration=${player.getDuration() ?: "unknown"}, " +
-                    "isPlaying=${player.getIsPlaying()}", exception
-        )
+        Log.w(TAG, "Playback error ${(exception as? androidx.media3.common.PlaybackException)?.errorCodeName ?: exception.javaClass.simpleName}")
 
         if (isLitePlayback() && !hasNextMirror() && viewModel.state.loading is Resource.Loading) {
             liteAwaitingRecovery = true
@@ -1945,7 +1931,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     override fun nextMirror() {
-        if (isLitePlayback()) liteManualSource = true
+        if (isLitePlayback() && !liteHandlingError) liteManualSource = true
         val nextLink = getNextLink()
         if (nextLink == null) {
             if (isLitePlayback() && viewModel.state.loading is Resource.Loading) {
@@ -2530,7 +2516,8 @@ class GeneratorPlayer : FullScreenPlayer() {
 
             // Set up TV clock visibility
             if (isLayout(TV)) {
-                val showTvClock = settingsManager.getBoolean(ctx.getString(R.string.tv_layout_clock_key), false)
+                val showTvClock =
+                    settingsManager.getBoolean(ctx.getString(R.string.tv_layout_clock_key), false)
                 playerBinding?.playerVideoClock?.isVisible = showTvClock
             } else {
                 playerBinding?.playerVideoClock?.isVisible = false
@@ -2655,7 +2642,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                 }
             }
 
-            if (turnVisible && wasGone) {
+            if (turnVisible && wasGone && binding.overlayLoadingSkipButton.isShown) {
                 binding.overlayLoadingSkipButton.requestFocus()
             }
         }

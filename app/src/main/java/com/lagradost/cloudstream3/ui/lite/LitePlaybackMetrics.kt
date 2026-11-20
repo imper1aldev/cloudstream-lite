@@ -1,13 +1,16 @@
 package com.lagradost.cloudstream3.ui.lite
 
+import androidx.annotation.OptIn
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 
 data class LitePlaybackSample(val startupMs: Long?, val bufferingMs: Long, val errors: Int)
 
 /** Session-local observations; unknown performance stays unknown. Owned by the player UI thread. */
+@OptIn(UnstableApi::class)
 class LitePlaybackMetrics(private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 }) {
     private class Sample(val host: String, val format: String, val selectedAt: Long) {
         var startupMs: Long? = null

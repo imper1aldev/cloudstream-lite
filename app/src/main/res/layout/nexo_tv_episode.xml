@@ -1,0 +1,32 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="224dp" android:layout_height="wrap_content" android:layout_marginEnd="12dp"
+    android:orientation="vertical" android:background="@drawable/nexo_tv_card_background"
+    android:padding="6dp" android:focusable="true" android:clickable="true">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="119dp">
+        <ImageView android:id="@+id/nexo_tv_episode_image" android:layout_width="match_parent"
+            android:layout_height="match_parent" android:scaleType="centerCrop" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/nexo_tv_episode_number"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_margin="6dp" android:paddingStart="6dp" android:paddingEnd="6dp"
+            android:paddingTop="3dp" android:paddingBottom="3dp"
+            android:background="@drawable/nexo_tv_resume_background" android:textSize="12sp" android:textColor="#FFFFFF" />
+        <androidx.appcompat.widget.AppCompatImageView android:id="@+id/nexo_tv_episode_watched"
+            android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="top|end"
+            android:layout_margin="6dp" android:background="@drawable/nexo_tv_resume_background"
+            android:src="@drawable/ic_baseline_check_24" app:tint="#FFFFFF"
+            android:contentDescription="@string/type_completed" android:visibility="gone" />
+        <ProgressBar android:id="@+id/nexo_tv_episode_progress" style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent" android:layout_height="3dp" android:layout_gravity="bottom"
+            android:max="100" android:progressTint="@color/colorAccent" android:progressBackgroundTint="#3C4964" />
+    </FrameLayout>
+    <TextView android:id="@+id/nexo_tv_episode_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="10dp" android:paddingStart="4dp" android:paddingEnd="4dp"
+        android:textColor="#FFFFFF" android:textSize="16sp" android:textStyle="bold" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:id="@+id/nexo_tv_episode_runtime" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" android:paddingStart="4dp" android:paddingEnd="4dp"
+        android:textColor="#AFBFE3" android:textSize="12sp" android:visibility="gone" />
+    <TextView android:id="@+id/nexo_tv_episode_description" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:paddingStart="4dp" android:paddingEnd="4dp"
+        android:textColor="#BDC2CF" android:textSize="13sp" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout>

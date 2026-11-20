@@ -20,6 +20,9 @@ val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
 kotlin {
     version = "1.0.1"
 
+    // Keep the plugin ABI independent of the JDK used to run the Gradle daemon.
+    jvmToolchain(libs.versions.jdkToolchain.get().toInt())
+
     applyDefaultHierarchyTemplate()
 
     android {

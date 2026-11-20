@@ -475,6 +475,7 @@ object PluginManager {
                 pluginData
             )
         }
+        loadedOnlinePlugins = true
     }
 
     /**
@@ -593,7 +594,7 @@ object PluginManager {
     /**
      * @return True if successful, false if not
      * */
-    private suspend fun loadPlugin(context: Context, file: File, data: PluginData): Boolean {
+    internal suspend fun loadPlugin(context: Context, file: File, data: PluginData): Boolean {
         val expectedPath = getPluginPath(
             context,
             ALLOWED_PLUGIN_INTERNAL_NAME,

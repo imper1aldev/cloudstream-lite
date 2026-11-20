@@ -1,0 +1,6 @@
+<resources>
+    <string name="nexo_tv_home_preparing">Preparing the catalog…</string>
+    <string name="nexo_tv_home_error">Could not load the catalog</string>
+    <string name="nexo_tv_view_all">View all</string>
+    <string name="nexo_tv_close_explore">Close section browser</string>
+</resources>

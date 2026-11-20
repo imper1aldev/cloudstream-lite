@@ -1,0 +1,26 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/nexo_tv_poster_width"
+    android:layout_height="@dimen/nexo_tv_poster_height"
+    android:layout_margin="@dimen/nexo_tv_card_gap"
+    android:background="@drawable/nexo_tv_card_background"
+    android:clipToOutline="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:padding="3dp">
+    <ImageView android:id="@+id/nexo_tv_card_image" android:layout_width="match_parent"
+        android:layout_height="match_parent" android:scaleType="centerCrop"
+        android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_gravity="bottom" android:orientation="vertical"
+        android:background="@drawable/nexo_tv_poster_shade"
+        android:paddingTop="24dp" android:paddingBottom="6dp" android:paddingHorizontal="6dp">
+        <TextView android:id="@+id/nexo_tv_card_title" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:maxLines="2" android:ellipsize="end"
+            android:textColor="#FFFFFF" android:textSize="14sp" android:textStyle="bold" />
+        <ProgressBar android:id="@+id/nexo_tv_card_progress"
+            style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent"
+            android:layout_height="5dp" android:layout_marginTop="5dp" android:max="100"
+            android:progressTint="#FF625C" android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,18 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#101114">
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_home_list"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:clipToPadding="false" android:clipChildren="false" android:paddingBottom="24dp" />
+    <View android:id="@+id/nexo_tv_home_skeleton"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:importantForAccessibility="no" android:visibility="gone"
+        android:background="@drawable/nexo_tv_home_skeleton" />
+    <LinearLayout android:id="@+id/nexo_tv_home_status" android:layout_width="match_parent"
+        android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="32dp">
+
+        <TextView android:id="@+id/nexo_tv_home_message" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_margin="20dp" android:textColor="#E9EDF5" android:textSize="20sp" android:text="@string/loading" />
+        <Button android:id="@+id/nexo_tv_home_retry" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:background="@drawable/nexo_tv_card_background" android:padding="12dp" android:textColor="#FFFFFF" android:text="@string/retry" />
+    </LinearLayout>
+</FrameLayout>

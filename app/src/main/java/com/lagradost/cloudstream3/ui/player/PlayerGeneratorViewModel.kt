@@ -404,16 +404,18 @@ class PlayerGeneratorViewModel : ViewModel() {
             )
         }
 
+        val requestInstance = state.instance
+        val clearCache = forceClearCache
         currentJob = viewModelScope.launchSafe {
             // Load more data
             val loadingState = safeApiCall {
                 generator?.generateLinks(
                     sourceTypes = sourceTypes,
-                    clearCache = forceClearCache,
+                    clearCache = clearCache,
                     callback = { link ->
                         if (isActive)
                             modifyState {
-                                add(link)
+                                if (instance == requestInstance && isActive) add(link) else this
                             }
                     },
                     isCasting = false,
@@ -421,7 +423,7 @@ class PlayerGeneratorViewModel : ViewModel() {
                     subtitleCallback = { link ->
                         if (isActive && isValidSubtitle(link))
                             modifyState {
-                                add(link)
+                                if (instance == requestInstance && isActive) add(link) else this
                             }
                     })
                 Unit
@@ -433,7 +435,7 @@ class PlayerGeneratorViewModel : ViewModel() {
 
             /** Only mark as success if we have not skipped loading */
             modifyState {
-                if (!isActive) {
+                if (!isActive || instance != requestInstance) {
                     this
                 } else {
                     when (loading) {

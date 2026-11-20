@@ -356,8 +356,8 @@ object ResultScreen : Screen {
                         },
                         onDownload = { episode ->
                             (fragment as? ResultFragment2)?.requestDownload {
-                                viewModel.handleAction(EpisodeClickEvent(ACTION_DOWNLOAD_EPISODE, episode))
-                            } ?: viewModel.handleAction(EpisodeClickEvent(ACTION_DOWNLOAD_EPISODE, episode))
+                                viewModel.handleAction(EpisodeClickEvent(ACTION_DOWNLOAD_EPISODE, episode, liteMobileDownload = true))
+                            } ?: viewModel.handleAction(EpisodeClickEvent(ACTION_DOWNLOAD_EPISODE, episode, liteMobileDownload = true))
                         },
                         onSyncRefresh = syncModel::updateMetaAndUser,
                         onRecommendationClick = { response ->
@@ -368,9 +368,9 @@ object ResultScreen : Screen {
                         onEpisodeClick = { episode, action ->
                             if (action == ACTION_DOWNLOAD_EPISODE) {
                                 (fragment as? ResultFragment2)?.requestDownload {
-                                    viewModel.handleAction(EpisodeClickEvent(action, episode))
-                                } ?: viewModel.handleAction(EpisodeClickEvent(action, episode))
-                            } else viewModel.handleAction(EpisodeClickEvent(action, episode))
+                                    viewModel.handleAction(EpisodeClickEvent(action, episode, liteMobileDownload = true))
+                                } ?: viewModel.handleAction(EpisodeClickEvent(action, episode, liteMobileDownload = true))
+                            } else viewModel.handleAction(EpisodeClickEvent(action, episode, liteMobileDownload = action == ACTION_DOWNLOAD_MIRROR))
                         },
                         onSeasonSelected = viewModel::changeSeason,
                         onRangeSelected = viewModel::changeRange,
@@ -500,12 +500,13 @@ object ResultScreen : Screen {
                 onSubscribe = onSubscribe,
                 onDownload = { episode ->
                     val status = downloadEpisodeStatus(episode, downloadStatuses)
-                    if (status == null || status == VideoDownloadManager.DownloadType.IsStopped || status == VideoDownloadManager.DownloadType.IsFailed) {
+                    if (canStartDownload(status)) {
                         onDownload(episode)
                     } else {
                         downloadMenuExpanded = true
                     }
                 },
+                onChooseDownload = { episode -> onEpisodeClick(episode, ACTION_DOWNLOAD_MIRROR) },
                 onDownloadAction = { action, episode ->
                     DownloadButtonSetup.handleDownloadClick(
                         DownloadClickEvent(action, episode.toDownloadEpisode())
@@ -558,6 +559,7 @@ object ResultScreen : Screen {
                         onClick = { onEpisodeClick(episode, ACTION_CLICK_DEFAULT) },
                         onLongClick = { onEpisodeClick(episode, ACTION_SHOW_OPTIONS) },
                         onDownload = if (canDownload) ({ onEpisodeClick(episode, ACTION_DOWNLOAD_EPISODE) }) else null,
+                        onChooseDownload = if (canDownload) ({ onEpisodeClick(episode, ACTION_DOWNLOAD_MIRROR) }) else null,
                         onDownloadAction = { action ->
                             DownloadButtonSetup.handleDownloadClick(DownloadClickEvent(action, episode.toDownloadEpisode()))
                         },
@@ -754,6 +756,7 @@ object ResultScreen : Screen {
         onFavorite: () -> Unit,
         onSubscribe: () -> Unit,
         onDownload: (ResultEpisode) -> Unit,
+        onChooseDownload: (ResultEpisode) -> Unit,
         onDownloadAction: (Int, ResultEpisode) -> Unit,
         onSync: () -> Unit,
     ) {
@@ -774,7 +777,10 @@ object ResultScreen : Screen {
                 )
                 downloadEpisode?.takeIf { canDownload }?.let { episode ->
                     Box {
-                        LiteDownloadIcon(episode.id, downloadStatus, onClick = { onDownload(episode) }, showLabel = true)
+                        LiteDownloadIcon(
+                            episode.id, downloadStatus, onClick = { onDownload(episode) }, showLabel = true,
+                            onLongClick = if (canStartDownload(downloadStatus)) ({ onChooseDownload(episode) }) else null,
+                        )
                         DropdownMenu(expanded = downloadMenuExpanded, onDismissRequest = { onDownloadMenuExpanded(false) }) {
                             downloadActions(downloadStatus).forEach { (action, label) ->
                                 DropdownMenuItem(text = { Text(stringResource(label)) },
@@ -860,6 +866,10 @@ object ResultScreen : Screen {
         null, VideoDownloadManager.DownloadType.IsStopped,
         VideoDownloadManager.DownloadType.IsFailed -> emptyList()
     }
+
+    private fun canStartDownload(status: VideoDownloadManager.DownloadType?) =
+        status == null || status == VideoDownloadManager.DownloadType.IsStopped ||
+            status == VideoDownloadManager.DownloadType.IsFailed
 
     private fun downloadEpisodeStatus(
         episode: ResultEpisode?,
@@ -980,6 +990,7 @@ object ResultScreen : Screen {
         onClick: () -> Unit,
         onLongClick: () -> Unit,
         onDownload: (() -> Unit)?,
+        onChooseDownload: (() -> Unit)?,
         onDownloadAction: (Int) -> Unit,
     ) {
         var downloadMenu by remember(episode.id) { mutableStateOf(false) }
@@ -1060,9 +1071,9 @@ object ResultScreen : Screen {
                     onDownload?.let { download ->
                         Box {
                             LiteDownloadIcon(episode.id, downloadStatus, onClick = {
-                                if (downloadStatus == null || downloadStatus == VideoDownloadManager.DownloadType.IsStopped || downloadStatus == VideoDownloadManager.DownloadType.IsFailed) download()
+                                if (canStartDownload(downloadStatus)) download()
                                 else downloadMenu = true
-                            })
+                            }, onLongClick = onChooseDownload.takeIf { canStartDownload(downloadStatus) })
                             DropdownMenu(expanded = downloadMenu, onDismissRequest = { downloadMenu = false }) {
                                 downloadActions(downloadStatus).forEach { (action, label) ->
                                     DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {

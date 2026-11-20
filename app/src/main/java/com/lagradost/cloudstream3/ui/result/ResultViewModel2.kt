@@ -75,6 +75,8 @@ import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_ALL
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_CHROMECAST
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
+import com.lagradost.cloudstream3.ui.lite.liteLinkLabel
+import com.lagradost.cloudstream3.ui.lite.parseLiteLinkName
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP_DOWNLOAD
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
 import com.lagradost.cloudstream3.ui.player.SubtitleData
@@ -1131,6 +1133,9 @@ class ResultViewModel2 : ViewModel() {
         if (activity == null) return
         val response = currentResponse ?: return
         val eps = currentEpisodes[currentIndex ?: return] ?: return
+        // ResultEpisode.index spans all seasons; Cast indexes this season's list.
+        val castEpisodeIndex = eps.indexOfFirst { it.id == result.id }
+        if (castEpisodeIndex < 0) return
 
         // Main needed because getCastSession needs to be on main thread
         main {
@@ -1139,7 +1144,7 @@ class ResultViewModel2 : ViewModel() {
                 response.isMovie(),
                 response.name,
                 response.posterUrl,
-                result.index,
+                castEpisodeIndex,
                 eps,
                 links,
                 subs,
@@ -1223,20 +1228,18 @@ class ResultViewModel2 : ViewModel() {
         sourceTypes: Set<ExtractorLinkType>,
         text: UiText,
         isCasting: Boolean = false,
+        liteDownloadLabels: Boolean = false,
         callback: (Pair<LinkLoadingResult, Int>) -> Unit
     ) {
-        // TODO Add skip loading here
         loadLinks(result, isVisible = true, sourceTypes, isCasting = isCasting) { links ->
-            // Could not find a better way to do this
-            //val context = CloudStreamApp.context
-            postPopup(
-                text,
-                links.links.map { txt("${it.name} ${Qualities.getStringByInt(it.quality)}") }
-                /*.amap {
-                val size =
-                    it.getVideoSize()?.let { size -> " " + formatFileSize(context, size) } ?: ""
-                txt("${it.name} ${Qualities.getStringByInt(it.quality)}$size")
-                }*/) {
+            if (liteDownloadLabels && links.links.isEmpty()) {
+                showToast(R.string.no_links_found_toast, Toast.LENGTH_SHORT)
+                return@loadLinks
+            }
+            postPopup(text, links.links.map { link ->
+                if (liteDownloadLabels) txt(liteLinkLabel(parseLiteLinkName(link.name), link.quality))
+                else txt("${link.name} ${Qualities.getStringByInt(link.quality)}")
+            }) {
                 callback.invoke(links to (it ?: return@postPopup))
             }
         }
@@ -1481,6 +1484,7 @@ class ResultViewModel2 : ViewModel() {
                         response.apiName,
                         response.getId(),
                         response.url,
+                        preferLiteLinks = click.liteMobileDownload && response.apiName == "NexoStream",
                     ).toWrapper()
                 )
             }
@@ -1490,7 +1494,8 @@ class ResultViewModel2 : ViewModel() {
                 acquireSingleLink(
                     click.data,
                     LOADTYPE_INAPP_DOWNLOAD,
-                    txt(R.string.episode_action_download_mirror)
+                    txt(R.string.episode_action_download_mirror),
+                    liteDownloadLabels = click.liteMobileDownload,
                 ) { (result, index) ->
                     DownloadQueueManager.addToQueue(
                         DownloadObjects.DownloadQueueItem(
@@ -1514,18 +1519,17 @@ class ResultViewModel2 : ViewModel() {
             }
 
             ACTION_RELOAD_EPISODE -> {
-                ioSafe {
-                    loadLinks(
-                        click.data,
-                        isVisible = false,
-                        LOADTYPE_INAPP,
-                        clearCache = true
-                    )
+                loadLinks(
+                    click.data,
+                    isVisible = true,
+                    sourceTypes = LOADTYPE_INAPP,
+                    clearCache = true
+                ) { result ->
+                    if (!isActive) return@loadLinks
+                    val message = if (result.links.isNotEmpty()) R.string.links_reloaded_toast
+                    else R.string.error_loading_links_toast
+                    showToast(message, Toast.LENGTH_SHORT)
                 }
-                showToast(
-                    R.string.links_reloaded_toast,
-                    Toast.LENGTH_SHORT
-                )
             }
 
             ACTION_CHROME_CAST_MIRROR -> {
@@ -1947,7 +1951,7 @@ class ResultViewModel2 : ViewModel() {
                         getEpisodes(
                             currentIndex ?: return,
                             currentRange ?: return,
-                        ), currentSorting ?: return
+                        ), currentSorting ?: DataStoreHelper.resultsSortingMode
                     )
                 )
             )

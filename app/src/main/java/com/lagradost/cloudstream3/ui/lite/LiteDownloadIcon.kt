@@ -1,6 +1,8 @@
 package com.lagradost.cloudstream3.ui.lite
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,7 +20,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun LiteDownloadIcon(id: Int, status: DownloadType?, onClick: () -> Unit, showLabel: Boolean = false) {
+fun LiteDownloadIcon(
+    id: Int,
+    status: DownloadType?,
+    onClick: () -> Unit,
+    showLabel: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     var progress by remember(id) { mutableStateOf<Pair<Long, Long>?>(null) }
     LaunchedEffect(id) {
@@ -48,23 +56,37 @@ fun LiteDownloadIcon(id: Int, status: DownloadType?, onClick: () -> Unit, showLa
     val percentage = progress?.takeIf { it.second > 0 }?.let { ((it.first.toDouble() / it.second) * 100).toInt().coerceIn(0, 100) }
     val accessibilityLabel = if (percentage != null && (active || status == DownloadType.IsPaused))
         stringResource(R.string.lite_download_progress, label, percentage) else label
-    val control: @Composable () -> Unit = {
-        IconButton(onClick = onClick, modifier = Modifier.size(48.dp).liteGlass(androidx.compose.foundation.shape.CircleShape)) {
-            Box(contentAlignment = Alignment.Center) {
-                if (active || status == DownloadType.IsPaused) {
-                    val total = progress?.second ?: 0
-                    if (total > 0) CircularProgressIndicator(
-                        progress = { ((progress?.first ?: 0).toFloat() / total).coerceIn(0f, 1f) },
-                        modifier = Modifier.size(40.dp), strokeWidth = 3.dp)
-                    else if (active) CircularProgressIndicator(Modifier.size(40.dp), strokeWidth = 3.dp)
-                }
-                Icon(painterResource(icon), accessibilityLabel, modifier = Modifier.size(24.dp),
-                    tint = when (status) {
-                        DownloadType.IsDone -> LiteColors.accent
-                        DownloadType.IsFailed -> MaterialTheme.colorScheme.error
-                        else -> LiteColors.onSurface
-                    })
+    val content: @Composable () -> Unit = {
+        Box(contentAlignment = Alignment.Center) {
+            if (active || status == DownloadType.IsPaused) {
+                val total = progress?.second ?: 0
+                if (total > 0) CircularProgressIndicator(
+                    progress = { ((progress?.first ?: 0).toFloat() / total).coerceIn(0f, 1f) },
+                    modifier = Modifier.size(40.dp), strokeWidth = 3.dp)
+                else if (active) CircularProgressIndicator(Modifier.size(40.dp), strokeWidth = 3.dp)
             }
+            Icon(painterResource(icon), accessibilityLabel, modifier = Modifier.size(24.dp),
+                tint = when (status) {
+                    DownloadType.IsDone -> LiteColors.accent
+                    DownloadType.IsFailed -> MaterialTheme.colorScheme.error
+                    else -> LiteColors.onSurface
+                })
+        }
+    }
+    val control: @Composable () -> Unit = {
+        val button = Modifier.size(48.dp).liteGlass(androidx.compose.foundation.shape.CircleShape)
+        if (onLongClick == null) {
+            IconButton(onClick = onClick, modifier = button, content = content)
+        } else {
+            Box(
+                modifier = button.combinedClickable(
+                    role = Role.Button,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    onLongClickLabel = stringResource(R.string.lite_choose_download_link),
+                ),
+                contentAlignment = Alignment.Center,
+            ) { content() }
         }
     }
     if (showLabel) Column(

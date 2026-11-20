@@ -1,0 +1,12 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="24dp" android:background="#0E1014">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+  <TextView android:id="@+id/nexo_tv_search_back" style="@style/NexoTvAction" android:text="@string/go_back" />
+  <EditText android:id="@+id/nexo_tv_search_input" android:layout_width="0dp" android:layout_weight="1" android:layout_height="56dp" android:hint="@string/title_search" android:textColor="#FFFFFF" android:textColorHint="#BDC2CF" android:textSize="22sp" android:singleLine="true" android:inputType="text" android:imeOptions="actionSearch" android:nextFocusLeft="@id/nexo_tv_search_back" android:nextFocusDown="@id/nexo_tv_search_grid" />
+ </LinearLayout>
+ <TextView android:id="@+id/nexo_tv_search_message" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp" android:textColor="#D5D8E0" android:textSize="18sp" />
+ <androidx.core.widget.NestedScrollView android:id="@+id/nexo_tv_search_history_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+  <LinearLayout android:id="@+id/nexo_tv_search_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+ </androidx.core.widget.NestedScrollView>
+ <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_search_grid" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:padding="8dp" android:clipChildren="false" android:clipToPadding="false" android:visibility="gone" />
+ <TextView android:id="@+id/nexo_tv_search_retry" style="@style/NexoTvAction" android:text="@string/retry" android:visibility="gone" />
+</LinearLayout>

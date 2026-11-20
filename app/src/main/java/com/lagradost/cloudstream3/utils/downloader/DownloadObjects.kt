@@ -60,6 +60,7 @@ object DownloadObjects {
         @JsonProperty("resultUrl") @SerialName("resultUrl") val resultUrl: String,
         @JsonProperty("links") @SerialName("links") val links: List<ExtractorLink>? = null,
         @JsonProperty("subs") @SerialName("subs") val subs: List<SubtitleData>? = null,
+        @JsonProperty("preferLiteLinks") @SerialName("preferLiteLinks") val preferLiteLinks: Boolean = false,
     ) {
         fun toWrapper(): DownloadQueueWrapper {
             return DownloadQueueWrapper(null, this)

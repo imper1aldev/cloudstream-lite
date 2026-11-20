@@ -133,4 +133,20 @@ class LiteLinkPolicyTest {
         assertTrue(rankLiteLinks(listOf(sourceASecond)).single().failed)
         assertTrue(rankLiteLinks(emptyList()).isEmpty())
     }
+    @Test fun downloadRankingPreservesEveryOriginalLinkInAttemptOrder() = kotlinx.coroutines.runBlocking {
+        suspend fun link(audio: String, height: Int) = com.lagradost.cloudstream3.utils.newExtractorLink(
+            "Fixture", "[Fixture][$audio] Server", "https://fixture.invalid/$audio/$height",
+            com.lagradost.cloudstream3.utils.ExtractorLinkType.VIDEO,
+        ) { quality = height }
+        val english1080 = link("ENG", 1080)
+        val lat720 = link("LAT", 720)
+        val lat1080 = link("LAT", 1080)
+        val castellano720 = link("CAST", 720)
+
+        assertEquals(listOf(lat1080, lat720, castellano720, english1080),
+            com.lagradost.cloudstream3.ui.lite.rankLiteDownloadLinks(
+                listOf(english1080, lat720, castellano720, lat1080)))
+        assertEquals(listOf(castellano720, english1080),
+            com.lagradost.cloudstream3.ui.lite.rankLiteDownloadLinks(listOf(english1080, castellano720)))
+    }
 }

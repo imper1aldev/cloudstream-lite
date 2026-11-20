@@ -1,5 +1,14 @@
 package com.lagradost.cloudstream3.ui.library
 
+import android.content.res.Configuration
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import com.lagradost.cloudstream3.ui.settings.Globals.TV
+import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
+import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +37,22 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 class FavoritesFragment : BaseComposeFragment() {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        if (!isLayout(TV or EMULATOR)) return super.onCreateView(inflater,container,savedInstanceState)
+        val host = FrameLayout(inflater.context).apply { id = R.id.nexo_tv_favorites_host }
+        if (childFragmentManager.findFragmentById(host.id) == null) {
+            val child = com.lagradost.cloudstream3.ui.tv.NexoTvFavoritesFragment().apply { arguments = this@FavoritesFragment.arguments?.let { Bundle(it) } }
+            childFragmentManager.beginTransaction().replace(host.id,child).commit()
+        }
+        return host
+    }
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        if (!isLayout(TV or EMULATOR)) super.onViewCreated(view,savedInstanceState)
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        if (!isLayout(TV or EMULATOR)) super.onConfigurationChanged(newConfig)
+    }
+
     @Composable override fun Content() {
         val context = LocalContext.current
         val view = LocalView.current
@@ -69,17 +94,7 @@ class FavoritesFragment : BaseComposeFragment() {
                 if (file.fileLength > 1024 && file.fileLength + 1024 >= file.totalBytes) DownloadType.IsDone else DownloadType.IsPaused }
             statuses = persisted + VideoDownloadManager.downloadStatus
         }
-        val filtered = favorites.filter { it.name.contains(query, ignoreCase = true) && (!onlyDownloaded || it.id in downloaded) }
-        val sorted = when (sorting) {
-            ListSorting.AlphabeticalA -> filtered.sortedBy { it.name.lowercase() }
-            ListSorting.AlphabeticalZ -> filtered.sortedByDescending { it.name.lowercase() }
-            ListSorting.RatingHigh -> filtered.sortedByDescending { it.score?.toInt(100) ?: 0 }
-            ListSorting.RatingLow -> filtered.sortedBy { it.score?.toInt(100) ?: 0 }
-            ListSorting.ReleaseDateNew -> filtered.sortedByDescending { it.year ?: 0 }
-            ListSorting.ReleaseDateOld -> filtered.sortedBy { it.year ?: 0 }
-            ListSorting.UpdatedOld -> filtered.sortedBy { it.latestUpdatedTime }
-            else -> filtered.sortedByDescending { it.latestUpdatedTime }
-        }
+        val sorted = filterAndSortFavorites(favorites, query, downloaded, onlyDownloaded, sorting)
         Column(Modifier.fillMaxSize().background(LiteColors.background)) {
             LiteHeader(stringResource(R.string.favorites_list_name), { openLiteSearch(view) })
             OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.title_search)) },
@@ -106,12 +121,13 @@ class FavoritesFragment : BaseComposeFragment() {
         }
         selected?.let { favorite ->
             ModalBottomSheet(onDismissRequest = { selected = null }, containerColor = LiteColors.background) {
+                val removedMessage = stringResource(R.string.favorite_removed, favorite.name)
                 Text(favorite.name, style = LiteType.rowTitle, modifier = Modifier.padding(LiteSpacing.screenPadding))
                 TextButton(onClick = { selected = null; loadResult(favorite.url, favorite.apiName, favorite.name) }) { Text(stringResource(R.string.lite_hero_details)) }
                 TextButton(onClick = {
                     DataStoreHelper.removeFavoritesData(favorite.id)
                     selected = null
-                    Snackbar.make(view, context.getString(R.string.favorite_removed).format(favorite.name), 10_000)
+                    Snackbar.make(view, removedMessage, 10_000)
                         .setAction(R.string.lite_undo) { DataStoreHelper.setFavoritesData(favorite.id, favorite) }.show()
                 }) { Text(stringResource(R.string.action_remove_from_favorites)) }
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
