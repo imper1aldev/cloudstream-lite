@@ -198,7 +198,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     private var liteMetricsInstance: Int? = null
     private var liteNetworkEpoch: Long? = null
     private fun isLitePlayback(): Boolean = ::viewModel.isInitialized &&
-        usesLitePlayback(isLayout(PHONE), viewModel.state.generatorState?.response?.apiName)
+        usesLitePlayback(isLayout(PHONE or TV), viewModel.state.generatorState?.response?.apiName)
     private var litePlaybackInstance: Int? = null
     private var liteAwaitingRecovery = false
     private var liteFinalChoiceMade = false
@@ -1945,7 +1945,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     override fun nextMirror() {
-        if (isLitePlayback()) liteManualSource = true
+        if (isLitePlayback() && !liteHandlingError) liteManualSource = true
         val nextLink = getNextLink()
         if (nextLink == null) {
             if (isLitePlayback() && viewModel.state.loading is Resource.Loading) {
@@ -2655,7 +2655,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                 }
             }
 
-            if (turnVisible && wasGone) {
+            if (turnVisible && wasGone && binding.overlayLoadingSkipButton.isShown) {
                 binding.overlayLoadingSkipButton.requestFocus()
             }
         }

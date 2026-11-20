@@ -11,6 +11,11 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import android.content.res.Configuration
+import android.widget.FrameLayout
+import com.lagradost.cloudstream3.ui.settings.Globals.TV
+import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
+import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -33,8 +38,22 @@ import kotlinx.coroutines.delay
 
 class SearchFragment2 : BaseComposeFragment() {
     // A stable view ID lets Fragment restore Compose saveable state on back/recreation.
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        super.onCreateView(inflater, container, savedInstanceState).apply { id = R.id.lite_search_compose }
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        if (!isLayout(TV or EMULATOR)) return super.onCreateView(inflater, container, savedInstanceState).apply { id = R.id.lite_search_compose }
+        val host = FrameLayout(inflater.context).apply { id = R.id.nexo_tv_search_host }
+        if (childFragmentManager.findFragmentById(host.id) == null) {
+            val child = com.lagradost.cloudstream3.ui.tv.NexoTvSearchFragment().apply { arguments = this@SearchFragment2.arguments?.let { Bundle(it) } }
+            arguments?.remove("lite_focus_search")
+            childFragmentManager.beginTransaction().replace(host.id, child).commit()
+        }
+        return host
+    }
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        if (!isLayout(TV or EMULATOR)) super.onViewCreated(view, savedInstanceState)
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        if (!isLayout(TV or EMULATOR)) super.onConfigurationChanged(newConfig)
+    }
 
     override fun onDestroyView() {
         hideKeyboard()

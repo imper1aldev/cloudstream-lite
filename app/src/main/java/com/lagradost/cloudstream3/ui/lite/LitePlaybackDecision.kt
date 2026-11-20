@@ -11,5 +11,5 @@ fun chooseLiteStart(
         .firstOrNull { extractionComplete || it.info.audioCode == "LAT" }?.id
 }
 
-fun usesLitePlayback(phoneLayout: Boolean, apiName: String?): Boolean =
-    phoneLayout && apiName == "NexoStream"
+fun usesLitePlayback(supportedLayout: Boolean, apiName: String?): Boolean =
+    supportedLayout && apiName == "NexoStream"

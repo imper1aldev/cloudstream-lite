@@ -13,16 +13,8 @@ import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.utils.BaseComposeFragment
 import com.lagradost.cloudstream4.compose.Screen
 
-/**
- * Home host (T3.1). Phone/tablet get the Lite Compose Home ([HomeScreen]);
- * TV/emulator keep the untouched legacy [HomeFragment], hosted as a child so
- * its behaviour (focus rail, TV channels, back handling) is byte-for-byte the
- * same code path.
- *
- * Routing lives entirely at the device-selection point ([isLayout]) inside this
- * file plus the single `navigation_home` line in `mobile_navigation.xml`.
- * Rollback: point `navigation_home` back to `HomeFragment` (one line) and
- * optionally delete this file + [HomeScreen].
+/** Phone/tablet keep HomeScreen; TV uses its own child and the shared HomeViewModel.
+ * Rollback TV only: replace NexoTvHomeFragment with HomeFragment below.
  */
 class HomeFragment2 : BaseComposeFragment(), Screen by HomeScreen {
 
@@ -38,21 +30,23 @@ class HomeFragment2 : BaseComposeFragment(), Screen by HomeScreen {
             return super.onCreateView(inflater, container, savedInstanceState)
         }
 
-        // TV/emulator: proxy the legacy fragment. A stable container id lets the
-        // child fragment state survive configuration changes (won't re-add then).
+        // TV/emulator: own presentation over the existing catalog contracts. A stable container id lets the
+        // child fragment state survive recreation and return from the back stack.
         val host = FrameLayout(inflater.context).apply {
             id = R.id.home_lite_legacy_host
         }
-        if (savedInstanceState == null) {
+        // A back-stack return can recreate the view with no savedInstanceState.
+        // Keep the child that FragmentManager already owns, including its focus state.
+        if (childFragmentManager.findFragmentById(R.id.home_lite_legacy_host) == null) {
             childFragmentManager.beginTransaction()
-                .replace(R.id.home_lite_legacy_host, HomeFragment())
+                .replace(R.id.home_lite_legacy_host, com.lagradost.cloudstream3.ui.tv.NexoTvHomeFragment())
                 .commit()
         }
         return host
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        // TV path lets the legacy child own its own system-bar padding.
+        // TV child owns its layout; retain the existing phone/tablet padding path.
         if (isLiteDevice) super.onViewCreated(view, savedInstanceState)
     }
 

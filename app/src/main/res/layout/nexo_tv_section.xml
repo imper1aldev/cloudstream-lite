@@ -1,0 +1,17 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:background="#101114" android:padding="24dp" android:clipChildren="false">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <TextView android:id="@+id/nexo_tv_section_title" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:textSize="24sp" android:textStyle="bold" android:textColor="#FFFFFF" />
+        <Button android:id="@+id/nexo_tv_section_close" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/sort_close" android:background="@drawable/nexo_tv_card_background" android:textColor="#FFFFFF" android:padding="12dp" />
+    </LinearLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/nexo_tv_section_list"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:clipToPadding="false" android:clipChildren="false" android:paddingVertical="12dp" />
+    <ProgressBar android:id="@+id/nexo_tv_section_progress" android:layout_width="32dp" android:layout_height="32dp"
+        android:layout_gravity="center" android:visibility="gone" />
+    <Button android:id="@+id/nexo_tv_section_retry" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="center" android:text="@string/retry" android:visibility="gone" />
+</LinearLayout>

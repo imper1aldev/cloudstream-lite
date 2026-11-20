@@ -515,7 +515,7 @@
 
     <fragment
         android:id="@+id/navigation_results_tv"
-        android:name="com.lagradost.cloudstream3.ui.result.ResultFragmentTv"
+        android:name="com.lagradost.cloudstream3.ui.tv.NexoTvResultFragment"
         android:layout_height="match_parent"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"

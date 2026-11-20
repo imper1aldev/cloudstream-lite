@@ -1,0 +1,7 @@
+<resources><style name="NexoTvAction">
+ <item name="android:layout_width">wrap_content</item><item name="android:layout_height">wrap_content</item>
+ <item name="android:minHeight">48dp</item><item name="android:gravity">center</item><item name="android:paddingStart">16dp</item><item name="android:paddingEnd">16dp</item>
+ <item name="android:paddingTop">10dp</item><item name="android:paddingBottom">10dp</item><item name="android:layout_marginEnd">10dp</item><item name="android:layout_marginTop">6dp</item>
+ <item name="android:textSize">17sp</item><item name="android:textColor">#FFFFFF</item><item name="android:background">@drawable/nexo_tv_text_focus</item>
+ <item name="android:focusable">true</item><item name="android:clickable">true</item>
+</style></resources>

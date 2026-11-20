@@ -1,0 +1,9 @@
+<resources>
+    <string name="nexo_tv_details_cast">Reparto</string>
+    <string name="nexo_tv_details_cast_scroll">Reparto. Usa izquierda y derecha para desplazarte.</string>
+    <string name="nexo_tv_emission_completed">Emisión finalizada</string>
+    <string name="nexo_tv_emission_ongoing">En emisión</string>
+    <string name="nexo_tv_emission_status">Emisión: %1$s</string>
+    <string name="nexo_tv_details_scroll_hint">Desplazar</string>
+    <string name="nexo_tv_trailer_failed">No se pudo reproducir el tráiler. Vuelve a Detalles para intentarlo de nuevo.</string>
+</resources>
