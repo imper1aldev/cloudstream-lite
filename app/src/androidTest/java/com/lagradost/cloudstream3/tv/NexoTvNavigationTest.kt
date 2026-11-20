@@ -112,7 +112,33 @@ class NexoTvNavigationTest {
     @Test fun expandedSectionDetailsBackAndSettingsKeepValidFocus() {
         NexoTvTestEnvironment(Provider()).use { env -> ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             homeReady(env,scenario)
-            scenario.onActivity { it.findViewById<View>(env.id("nexo_tv_home_list")).findViewWithTag<View>("section-title:Navigation row")!!.performClick() }
+            lateinit var row: RecyclerView
+            scenario.onActivity { a ->
+                val sectionRow = a.findViewById<View>(env.id("nexo_tv_home_list"))
+                    .findViewWithTag<View>("section:Navigation row")
+                row = sectionRow.findViewById(env.id("nexo_tv_row_list"))
+                row.scrollToPosition(0)
+            }
+            val limit = androidx.test.platform.app.InstrumentationRegistry.getArguments()
+                .getString("homeRowLimit")?.toInt() ?: 16
+            env.await(scenario,"First card not laid out") {
+                row.adapter?.itemCount == limit + 1 && row.findViewHolderForAdapterPosition(0) != null
+            }
+            scenario.onActivity { row.findViewHolderForAdapterPosition(0)!!.itemView.requestFocus() }
+            env.await(scenario,"First card did not take focus") { it.currentFocus?.contentDescription == "Home 0" }
+            for (position in 1..limit) {
+                env.key(KeyEvent.KEYCODE_DPAD_RIGHT)
+                env.await(scenario,"Right did not advance to position $position") {
+                    row.focusedChild?.let(row::getChildAdapterPosition) == position
+                }
+            }
+            env.await(scenario,"View all missing after $limit presses") {
+                val focused = it.currentFocus ?: return@await false
+                val visible = android.graphics.Rect()
+                focused.tag == "section-more:Navigation row" && focused.getGlobalVisibleRect(visible) &&
+                    visible.width() == focused.width && visible.height() == focused.height
+            }
+            env.key(KeyEvent.KEYCODE_DPAD_CENTER)
             fun section(a:MainActivity):DialogFragment? {
                 val host=(a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment).childFragmentManager.primaryNavigationFragment ?: return null
                 return host.childFragmentManager.findFragmentByTag("nexo-tv-section") as? DialogFragment
@@ -126,7 +152,7 @@ class NexoTvNavigationTest {
             scenario.recreate()
             env.await(scenario,"Section recreation lost item") { section(it)?.view?.findFocus()?.contentDescription=="Home 7" }
             env.key(KeyEvent.KEYCODE_BACK)
-            env.await(scenario,"Section close lost source title") { it.currentFocus?.tag=="section-title:Navigation row" }
+            env.await(scenario,"Section close lost View all") { it.currentFocus?.tag=="section-more:Navigation row" }
             scenario.onActivity { it.findViewById<View>(R.id.navigation_settings).requestFocus() }
             scenario.onActivity { assertEquals(R.id.navigation_home,nav(it).currentDestination?.id) }
             env.key(KeyEvent.KEYCODE_DPAD_CENTER)

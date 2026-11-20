@@ -375,6 +375,9 @@ class HomeViewModel : ViewModel() {
                         }
                     }
 
+                    val showCatalogBeforePreview = isLayout(TV)
+                    if (showCatalogBeforePreview) publishPage()
+
                     val items = data.value.mapNotNull { it?.items }.flatten()
 
 
@@ -414,7 +417,7 @@ class HomeViewModel : ViewModel() {
                     } else {
                         _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
                     }
-                    publishPage()
+                    if (!showCatalogBeforePreview) publishPage()
                 } catch (e: Exception) {
                     _randomItems.postValue(emptyList())
                     logError(e)

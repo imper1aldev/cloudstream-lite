@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Parcelable
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.doOnNextLayout
@@ -41,10 +42,19 @@ class NexoTvSectionDialog : DialogFragment(R.layout.nexo_tv_section) {
         binding = ui
         ui.nexoTvSectionTitle.text = key
         ui.nexoTvSectionClose.setOnClickListener { dismiss() }
-        ui.nexoTvSectionRetry.setOnClickListener { model.expand(key) }
+        ui.nexoTvSectionRetry.setOnClickListener {
+            model.expand(key)
+            restoreFocus()
+        }
         val adapter = NexoTvCardAdapter(false, { restoring = true; loadResult(it.url, it.apiName, it.name) }, { false }, { item, card ->
+            card.setOnKeyListener { _, code, event ->
+                val position = ui.nexoTvSectionList.getChildAdapterPosition(card)
+                val columns = (ui.nexoTvSectionList.layoutManager as GridLayoutManager).spanCount
+                event.action == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_UP &&
+                    position in 0 until columns && ui.nexoTvSectionClose.requestFocus()
+            }
             if (!restoring) { itemKey = item.tvItemKey; fallback = (ui.nexoTvSectionList.layoutManager as? GridLayoutManager)?.getPosition(card) ?: 0 }
-        })
+        }, immersive = true)
         cards = adapter
         ui.nexoTvSectionList.apply {
             itemAnimator = null
@@ -94,7 +104,7 @@ class NexoTvSectionDialog : DialogFragment(R.layout.nexo_tv_section) {
     }
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        parentFragmentManager.fragments.filterIsInstance<NexoTvHomeFragment>().firstOrNull()?.focusSectionTitle(key)
+        parentFragmentManager.fragments.filterIsInstance<NexoTvHomeFragment>().firstOrNull()?.focusSectionMore(key)
     }
     override fun onDestroyView() {
         scroll = binding?.nexoTvSectionList?.layoutManager?.onSaveInstanceState() ?: scroll

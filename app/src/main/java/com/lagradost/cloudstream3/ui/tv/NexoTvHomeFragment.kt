@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.tv
 
+import android.animation.ValueAnimator
 import android.os.Bundle
 import android.os.Parcelable
 import android.view.KeyEvent
@@ -88,7 +89,7 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
             }, { name ->
                 if (parentFragmentManager.findFragmentByTag("nexo-tv-section") == null)
                     NexoTvSectionDialog().apply { arguments = Bundle().apply { putString("nexo_tv_section_key", name) } }.show(parentFragmentManager, "nexo-tv-section")
-            }, ::focused, { model.expand(it) })
+            }, ::focused, ::advanceHero)
         rows = adapter
         ui.nexoTvHomeList.apply {
             itemAnimator = null
@@ -119,15 +120,31 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
-                    delay(8_000)
-                    if (heroes.size > 1 && parentFragmentManager.findFragmentByTag("nexo-tv-section") == null) {
-                        heroIndex = (heroIndex+1)%heroes.size
-                        render()
-                    }
+                    delay(6_000)
+                    val list = binding?.nexoTvHomeList ?: continue
+                    val hero = list.findViewHolderForAdapterPosition(0)?.itemView ?: continue
+                    if (rows?.currentList?.firstOrNull()?.hero != null &&
+                        !list.hasFocus() && !hero.hasFocus() && hero.isShown &&
+                        hero.getLocalVisibleRect(android.graphics.Rect()) &&
+                        android.os.Build.VERSION.SDK_INT >= 26 && ValueAnimator.areAnimatorsEnabled() &&
+                        parentFragmentManager.findFragmentByTag("nexo-tv-section") == null
+                    ) advanceHero(1)
                 }
             }
         }
     }
+    private fun advanceHero(direction: Int): Boolean {
+        if (heroes.size < 2) return false
+        heroIndex = (heroIndex + direction + heroes.size) % heroes.size
+        val item = heroes[heroIndex].item
+        if (anchor?.sectionKey == "@hero") {
+            anchor = TvFocusAnchor("@hero", item.tvItemKey, 0)
+            memory["@hero"] = checkNotNull(anchor)
+        }
+        render()
+        return true
+    }
+
     private fun prepareProvider(force: Boolean) {
         if (preparing?.isActive == true) return
         providerReady = null; render()
@@ -154,12 +171,23 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         val catalog = (page as? Resource.Success)?.value.orEmpty()
         val itemsByKey = catalog.values.flatMap { it.list.list }.associateBy { it.tvItemKey }
         val preview = (model.preview.value as? Resource.Success)?.value?.second.orEmpty()
-        heroes = preview.take(5).mapNotNull { response ->
-            itemsByKey["${response.apiName}\u0000${response.url}"]?.let { TvHero(it, response.backgroundPosterUrl ?: response.posterUrl ?: it.posterUrl, response.plot) }
-        }.ifEmpty { listOfNotNull(model.heroCandidate()?.let { TvHero(it, it.posterUrl, null) }) }
-        heroIndex = heroIndex.coerceIn(0, (heroes.size-1).coerceAtLeast(0))
+        val selectedHeroKey = heroes.getOrNull(heroIndex)?.item?.tvItemKey ?: anchor?.takeIf { it.sectionKey == "@hero" }?.itemKey
+        heroes = preview.mapNotNull { response ->
+            itemsByKey["${response.apiName}\u0000${response.url}"]?.let { TvHero(it, response.backgroundPosterUrl ?: response.posterUrl ?: it.posterUrl, response.plot, response.backgroundPosterUrl == null,
+                listOfNotNull(
+                    when (response.type) {
+                        TvType.Movie -> getString(R.string.movies_singular)
+                        TvType.TvSeries, TvType.AsianDrama -> getString(R.string.tv_series_singular)
+                        TvType.Anime, TvType.AnimeMovie, TvType.OVA -> getString(R.string.anime_singular)
+                        else -> null
+                    },
+                    response.year?.takeIf { it > 0 }?.toString(),
+                    response.tags?.firstOrNull { it.isNotBlank() }).joinToString(" · ")) }
+        }.distinctBy { it.item.tvItemKey }.take(5).ifEmpty { listOfNotNull(model.heroCandidate()?.let { TvHero(it, it.posterUrl, null, true) }) }
+        heroIndex = heroes.indexOfFirst { it.item.tvItemKey == selectedHeroKey }.takeIf { it >= 0 }
+            ?: heroIndex.coerceIn(0, heroes.lastIndex.coerceAtLeast(0))
         val content = buildList {
-            heroes.getOrNull(heroIndex)?.let { add(TvHomeRow("@hero", "", emptyList(), hero = it)) }
+            heroes.getOrNull(heroIndex)?.let { add(TvHomeRow("@hero", "", emptyList(), hero = it, heroIndex = heroIndex, heroCount = heroes.size)) }
             model.resumeWatching.value?.takeIf { it.isNotEmpty() }?.let { add(TvHomeRow("@resume", getString(R.string.continue_watching), it)) }
             favorites.takeIf { it.isNotEmpty() }?.let { add(TvHomeRow("@favorites", getString(R.string.favorites_list_name), it)) }
             catalog.forEach { (name, data) -> if (data.list.list.isNotEmpty()) add(TvHomeRow(name, name, data.list.list.toList(), true, data.hasNext, data.loading, data.error)) }
@@ -168,8 +196,13 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
         val empty = content.isEmpty() || providerReady != true || page is Resource.Failure
         ui.nexoTvHomeStatus.isVisible = empty
         ui.nexoTvHomeList.isVisible = !empty
-        ui.nexoTvHomeProgress.isVisible = loading
-        ui.nexoTvHomeMessage.setText(if (loading) R.string.loading else R.string.no_data)
+        ui.nexoTvHomeSkeleton.isVisible = loading && empty
+        ui.nexoTvHomeMessage.setText(when {
+            providerReady == null -> R.string.nexo_tv_home_preparing
+            loading -> R.string.loading
+            providerReady == false || page is Resource.Failure -> R.string.nexo_tv_home_error
+            else -> R.string.no_data
+        })
         ui.nexoTvHomeRetry.isVisible = !loading
         rows?.submitList(content) {
             if (binding !== ui) return@submitList
@@ -206,8 +239,8 @@ class NexoTvHomeFragment : Fragment(R.layout.nexo_tv_home) {
             ui.root.findFocus()?.let(::bindEntry)
         }
     }
-    internal fun focusSectionTitle(key: String) {
-        anchor = TvFocusAnchor(key, "@title", 0)
+    internal fun focusSectionMore(key: String) {
+        anchor = TvFocusAnchor(key, "@more", 16)
         restoring = true; pendingRestore = true
         binding?.root?.post { restoreFocus() }
     }

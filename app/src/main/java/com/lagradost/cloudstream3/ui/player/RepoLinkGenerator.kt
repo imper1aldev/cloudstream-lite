@@ -9,6 +9,8 @@ import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import com.lagradost.cloudstream3.utils.AppContextUtils.html
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -16,10 +18,12 @@ data class Cache(
     val linkCache: MutableSet<ExtractorLink>,
     val subtitleCache: MutableSet<SubtitleData>,
     /** When it was last updated */
-    var lastCachedTimestamp: Long = unixTime,
+    @Volatile var lastCachedTimestamp: Long = unixTime,
     /** If it has fully loaded */
     var saturated: Boolean,
-)
+) {
+    fun isFresh(now: Long = unixTime): Boolean = now - lastCachedTimestamp in 0..(20 * 60)
+}
 
 class RepoLinkGenerator(
     episodes: List<ResultEpisode>,
@@ -27,17 +31,12 @@ class RepoLinkGenerator(
 ) : VideoGenerator<ResultEpisode>(episodes) {
     companion object {
         const val TAG = "RepoLink"
-        val cache: HashMap<Pair<String, Int>, Cache> =
-            hashMapOf()
+        val cache = ConcurrentHashMap<Pair<String, Int>, Cache>()
     }
 
     override val hasCache = true
     override val canSkipLoading = true
     override fun getId(index: Int): Int? = videos.getOrNull(index)?.id
-
-    // this is a simple array that is used to instantly load links if they are already loaded
-    //var linkCache = Array<Set<ExtractorLink>>(size = episodes.size, init = { setOf() })
-    //var subsCache = Array<Set<SubtitleData>>(size = episodes.size, init = { setOf() })
 
     @Throws
     override suspend fun generateLinks(
@@ -50,16 +49,14 @@ class RepoLinkGenerator(
     ): Boolean {
         val current = videos.getOrNull(offset) ?: return false
 
+        val key = current.apiName to current.id
         val currentCache = synchronized(cache) {
-            cache[current.apiName to current.id] ?: Cache(
-                mutableSetOf(),
-                mutableSetOf(),
-                unixTime,
-                false
-            ).also {
-                cache[current.apiName to current.id] = it
-            }
+            // A new entry isolates in-flight callbacks from a previous extraction.
+            cache[key]?.takeIf { !clearCache && it.isFresh() }
+                ?: Cache(mutableSetOf(), mutableSetOf(), saturated = false).also { cache[key] = it }
         }
+        val extractionJob = currentCoroutineContext()[Job]
+        fun isCurrent() = extractionJob?.isActive != false && cache[key] === currentCache
 
         // These act as a general filter to prevent duplication of links or names
         // Avoid any possible ConcurrentModificationException
@@ -69,18 +66,9 @@ class RepoLinkGenerator(
         val lastCountedSuffix = ConcurrentHashMap<String, AtomicInteger>()
 
         synchronized(currentCache) {
-            val outdatedCache =
-                unixTime - currentCache.lastCachedTimestamp > 60 * 20 // 20 minutes
-
-            if (outdatedCache || clearCache) {
-                currentCache.linkCache.clear()
-                currentCache.subtitleCache.clear()
-                currentCache.saturated = false
-            } else if (currentCache.linkCache.isNotEmpty()) {
-                Log.d(
-                    TAG,
-                    "Resumed previous loading from ${unixTime - currentCache.lastCachedTimestamp}s ago"
-                )
+            if (!isCurrent()) return false
+            if (currentCache.linkCache.isNotEmpty()) {
+                Log.d(TAG, "Reusing cached links for episode ${current.id}")
             }
 
             // call all callbacks
@@ -104,13 +92,13 @@ class RepoLinkGenerator(
             }
         }
 
+        Log.d(TAG, "Extracting links for episode ${current.id}, forced=$clearCache")
         val result = APIRepository(
             getApiFromNameNull(current.apiName) ?: throw Exception("This provider does not exist")
         ).loadLinks(
             current.data,
             isCasting = isCasting,
             subtitleCallback = { file ->
-                Log.d(TAG, "Loaded SubtitleFile: $file")
                 val correctFile = PlayerSubtitleHelper.getSubtitleData(file)
                 if (correctFile.url.isBlank() || !currentSubsUrls.add(correctFile.url)) {
                     return@loadLinks
@@ -126,25 +114,23 @@ class RepoLinkGenerator(
                     correctFile.copy(originalName = nameDecoded, nameSuffix = "$suffixCount")
 
                 synchronized(currentCache) {
-                    if (currentCache.subtitleCache.add(updatedFile)) {
+                    if (isCurrent() && currentCache.subtitleCache.add(updatedFile)) {
                         subtitleCallback(updatedFile)
                         currentCache.lastCachedTimestamp = unixTime
                     }
                 }
             },
             callback = { link ->
-                Log.d(TAG, "Loaded ExtractorLink: $link")
                 if (link.url.isBlank() || !currentLinksUrls.add(link.url)) {
                     return@loadLinks
                 }
 
                 synchronized(currentCache) {
-                    if (currentCache.linkCache.add(link)) {
+                    if (isCurrent() && currentCache.linkCache.add(link)) {
                         if (sourceTypes.contains(link.type)) {
                             callback(Pair(link, null))
                         }
 
-                        currentCache.linkCache.add(link)
                         currentCache.lastCachedTimestamp = unixTime
                     }
                 }
@@ -152,6 +138,7 @@ class RepoLinkGenerator(
         )
 
         synchronized(currentCache) {
+            if (!isCurrent()) return false
             currentCache.saturated = currentCache.linkCache.isNotEmpty()
             currentCache.lastCachedTimestamp = unixTime
         }

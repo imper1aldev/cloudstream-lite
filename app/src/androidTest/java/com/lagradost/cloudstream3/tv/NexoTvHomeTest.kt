@@ -28,18 +28,29 @@ class NexoTvHomeTest {
         override val mainPage = mainPageOf("first" to "TV first", "second" to "TV second", "third" to "TV third")
         @Volatile var empty = true
         val firstLoads = AtomicInteger()
+        val releaseInitialCatalog = kotlinx.coroutines.CompletableDeferred<Unit>()
         val failSecond = AtomicInteger(1)
         override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-            if (page == 1) firstLoads.incrementAndGet()
+            if (page == 1) {
+                firstLoads.incrementAndGet()
+                if (!empty) releaseInitialCatalog.await()
+            }
             kotlinx.coroutines.delay(80)
             if (page == 2 && request.data == "first" && failSecond.getAndDecrement() > 0) error("Temporary fixture page failure")
-            val items = if (empty) emptyList() else (0..11).map { offset ->
+            val count = when (request.data) {
+                "second" -> 16
+                "third" -> 8
+                else -> 12
+            }
+            val items = if (empty) emptyList() else (0 until count).map { offset ->
                 val id = (page-1)*12+offset
                 newMovieSearchResponse("${request.name} $id", "$mainUrl/${request.data}/$id", TvType.Movie)
             }
-            return newHomePageResponse(request.name, items, !empty && page < 3)
+            return newHomePageResponse(request.name, items, !empty && request.data == "first" && page < 3)
         }
-        override suspend fun load(url: String) = newMovieLoadResponse("Home ${url.substringAfterLast('/')}", url, TvType.Movie, "unused") {
+        override suspend fun load(url: String) = newAnimeLoadResponse("Home ${url.substringAfterLast('/')}", url, TvType.Anime, comingSoonIfNone = false) {
+            year = 2024
+            tags = listOf("Aventura")
             plot = "Local Home navigation fixture"
         }
     }
@@ -100,7 +111,20 @@ class NexoTvHomeTest {
                 }
                 await("Empty catalog state missing") { it.findViewById<View>(id("nexo_tv_home_status"))?.visibility == View.VISIBLE && vm(it).page.value is Resource.Success }
                 scenario.onActivity { register(); provider.empty=false; MainActivity.afterPluginsLoadedEvent.invoke(true) }
+                try {
+                    await("Skeleton missing during delayed initial catalog") {
+                        it.findViewById<View>(id("nexo_tv_home_skeleton"))?.isShown == true &&
+                            it.findViewById<View>(id("nexo_tv_home_list"))?.isShown == false
+                    }
+                    capture("nexo-tv-home-slow")
+                } finally {
+                    provider.releaseInitialCatalog.complete(Unit)
+                }
                 await("Late provider/catalog left No Data") { (vm(it).page.value as? Resource.Success)?.value?.get("TV first")?.list?.list?.size == 12 && it.findViewById<View>(id("nexo_tv_home_status"))?.visibility == View.GONE }
+                await("Skeleton remains after initial catalog arrives") {
+                    it.findViewById<View>(id("nexo_tv_home_skeleton"))?.isShown == false &&
+                        it.findViewById<View>(id("nexo_tv_home_list"))?.isShown == true
+                }
                 await("Hero title was not laid out") { a -> a.findViewById<android.widget.TextView>(id("nexo_tv_hero_title"))?.let { it.isShown && it.width > 0 && it.height > 0 } == true }
                 val titleBounds = android.graphics.Rect()
                 scenario.onActivity { it.findViewById<View>(id("nexo_tv_hero_title")).getGlobalVisibleRect(titleBounds) }
@@ -113,50 +137,54 @@ class NexoTvHomeTest {
                     bitmap.recycle()
                     assertTrue("Focused hero foreground covers its title",glyphs>30)
                 }
+                await("Anime metadata missing from the featured title") { activity ->
+                    val metadata = activity.findViewById<android.widget.TextView>(id("nexo_tv_hero_metadata"))
+                    metadata?.isShown == true &&
+                        metadata.text.toString() == listOf(activity.getString(R.string.anime_singular), "2024", "Aventura").joinToString(" · ")
+                }
+                capture("nexo-tv-home-anime")
                 capture("nexo-tv-home-initial")
                 lateinit var master: RecyclerView
                 scenario.onActivity { a -> master=a.findViewById(id("nexo_tv_home_list")) }
                 for ((index, key) in listOf("TV first", "TV second", "TV third").withIndex()) {
                     scenario.onActivity { master.scrollToPosition(index+1) }
                     await("Plugin section order changed at $index") { master.findViewHolderForAdapterPosition(index+1)?.itemView?.tag == "section:$key" }
+                    val expectedCards = listOf(13, 16, 8)[index]
+                    await("Unexpected card count for $key") {
+                        val section = master.findViewHolderForAdapterPosition(index + 1)?.itemView
+                        section?.findViewById<RecyclerView>(id("nexo_tv_row_list"))?.adapter?.itemCount == expectedCards
+                    }
                 }
                 scenario.onActivity { master.scrollToPosition(1) }
                 await("First row unavailable") { master.findViewHolderForAdapterPosition(1) != null }
                 lateinit var row: RecyclerView
                 scenario.onActivity { row=master.findViewHolderForAdapterPosition(1)!!.itemView.findViewById(id("nexo_tv_row_list")); row.scrollToPosition(11) }
                 await("Row end unavailable") { row.findViewHolderForAdapterPosition(11) != null }
-                val key11 = "NexoStream\u0000${provider.mainUrl}/first/11"
+                val key15 = "NexoStream\u0000${provider.mainUrl}/first/15"
                 scenario.onActivity { row.findViewHolderForAdapterPosition(11)!!.itemView.requestFocus() }
-                await("Pagination error/retry not visible") { a ->
-                    (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.error == true &&
-                        master.findViewHolderForAdapterPosition(1)?.itemView?.findViewById<View>(id("nexo_tv_row_retry"))?.visibility == View.VISIBLE
-                }
-                press(KeyEvent.KEYCODE_DPAD_DOWN)
-                await("Pagination retry cannot be reached with the remote") { it.currentFocus?.id == id("nexo_tv_row_retry") }
+                press(KeyEvent.KEYCODE_DPAD_RIGHT)
+                await("View all was not reached from the last title") { it.currentFocus?.tag == "section-more:TV first" }
                 press(KeyEvent.KEYCODE_DPAD_CENTER)
-                await("Second page failed or stole focus") { a -> (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.currentPage == 2 && a.currentFocus?.tag == key11 }
-                scenario.onActivity { row.scrollToPosition(23) }
-                await("Next page card unavailable") { row.findViewHolderForAdapterPosition(23) != null }
-                val key23 = "NexoStream\u0000${provider.mainUrl}/first/23"
-                scenario.onActivity { row.findViewHolderForAdapterPosition(23)!!.itemView.requestFocus() }
-                await("Third page failed or stole focus") { a -> (vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.currentPage == 3 && row.adapter?.itemCount == 36 && a.currentFocus?.tag == key23 }
-                press(KeyEvent.KEYCODE_DPAD_CENTER)
-                await("Details did not open selected item") { nav(it).navController.currentDestination?.id == R.id.navigation_results_tv && it.findViewById<android.widget.TextView>(context.resources.getIdentifier("nexo_tv_result_title", "id", context.packageName))?.text?.toString() == "Home 23" }
-                press(KeyEvent.KEYCODE_BACK)
-                await("Home identity not restored") { it.currentFocus?.tag == key23 }
-                scenario.recreate()
-                await("Home recreation lost identity") { it.currentFocus?.tag == key23 }
-                scenario.onActivity { a ->
-                    val title=a.findViewById<View>(id("nexo_tv_home_list")).findViewWithTag<View>("section-title:TV first")
-                    checkNotNull(title).requestFocus(); title.performClick()
+                fun section(a: MainActivity) =
+                    nav(a).childFragmentManager.primaryNavigationFragment?.childFragmentManager
+                        ?.findFragmentByTag("nexo-tv-section")
+                await("Section dialog missing") { a -> section(a)?.dialogViewWidth() == a.resources.displayMetrics.widthPixels }
+                await("Failed pagination did not expose retry") { a ->
+                    section(a)?.view?.findViewById<View>(id("nexo_tv_section_retry"))?.visibility == View.VISIBLE
                 }
-                await("Section dialog missing") { a -> nav(a).childFragmentManager.primaryNavigationFragment?.childFragmentManager?.findFragmentByTag("nexo-tv-section")?.dialogViewWidth() == a.resources.displayMetrics.widthPixels }
                 capture("nexo-tv-section")
-                val callsBefore = provider.firstLoads.get()
-                SystemClock.sleep(400)
-                assertEquals("Section repeated initial request", callsBefore, provider.firstLoads.get())
+                scenario.onActivity { a ->
+                    checkNotNull(section(a)?.view?.findViewById<View>(id("nexo_tv_section_retry"))).requestFocus()
+                }
+                press(KeyEvent.KEYCODE_DPAD_CENTER)
+                await("Retry did not recover page two") { a ->
+                    ((vm(a).page.value as? Resource.Success)?.value?.get("TV first")?.currentPage ?: 0) >= 2 &&
+                        (section(a)?.view?.findViewById<RecyclerView>(id("nexo_tv_section_list"))?.adapter?.itemCount ?: 0) >= 24
+                }
                 press(KeyEvent.KEYCODE_BACK)
-                await("Section close lost title focus") { it.currentFocus?.tag == "section-title:TV first" }
+                await("Section close lost View all focus") { it.currentFocus?.tag == "section-more:TV first" }
+                press(KeyEvent.KEYCODE_DPAD_LEFT)
+                await("Last title focus was lost") { it.currentFocus?.tag == key15 }
                 val now=System.currentTimeMillis()
                 scenario.onActivity {
                     DataStoreHelper.setFavoritesData(favoriteId, DataStoreHelper.FavoritesData(now, favoriteId, now, "TV favorite", "${provider.mainUrl}/favorite", "NexoStream", TvType.Movie, null, null))

@@ -117,3 +117,8 @@ fun chooseLiteUpgrade(candidates: List<LiteCandidate>, currentId: String): Strin
     val comparable = eligible.filter { group(it) == group(current) }.all { it.startupMs != null }
     return best.id.takeIf { comparable && best.startupMs!! < current.startupMs!! }
 }
+
+internal fun rankLiteDownloadLinks(links: List<com.lagradost.cloudstream3.utils.ExtractorLink>) =
+    rankLiteLinks(links.mapIndexed { index, link ->
+        LiteCandidate(index.toString(), parseLiteLinkName(link.name), link.quality)
+    }).map { links[it.id.toInt()] }

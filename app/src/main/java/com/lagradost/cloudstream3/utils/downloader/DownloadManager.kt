@@ -36,6 +36,7 @@ import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.services.VideoDownloadService
 import com.lagradost.cloudstream3.sortUrls
 import com.lagradost.cloudstream3.ui.download.DOWNLOAD_NAVIGATE_TO
+import com.lagradost.cloudstream3.ui.lite.rankLiteDownloadLinks
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP_DOWNLOAD
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
 import com.lagradost.cloudstream3.ui.player.SubtitleData
@@ -2074,16 +2075,13 @@ object VideoDownloadManager {
                 }
             }
 
-            // Profiles should always contain a download type
-            val profile = QualityDataHelper.getProfiles().first {
-                it.types.contains(
-                    QualityDataHelper.QualityProfileType.Download
-                )
-            }
-
-            val sortedLinks = currentLinks.sortedBy { link ->
-                // Negative, because the highest priority should be first
-                -getLinkPriority(profile.id, link)
+            val sortedLinks = if (downloadItem.preferLiteLinks) {
+                rankLiteDownloadLinks(currentLinks.toList())
+            } else {
+                val profile = QualityDataHelper.getProfiles().first {
+                    QualityDataHelper.QualityProfileType.Download in it.types
+                }
+                currentLinks.sortedByDescending { getLinkPriority(profile.id, it) }
             }
 
             downloadEpisodeWithLinks(

@@ -5,4 +5,6 @@
     <dimen name="nexo_tv_landscape_width">216dp</dimen>
     <dimen name="nexo_tv_landscape_height">122dp</dimen>
     <dimen name="nexo_tv_card_gap">8dp</dimen>
+    <!-- Poster height, two card margins and two 4dp list insets. -->
+    <dimen name="nexo_tv_home_row_height">192dp</dimen>
 </resources>

@@ -1788,19 +1788,7 @@ class GeneratorPlayer : FullScreenPlayer() {
             viewModel.modifyState { this.addError(link) }
         }
 
-        val currentUrl =
-            currentSelectedLink?.let { it.first?.url ?: it.second?.uri?.toString() } ?: "unknown"
-        val headers = currentSelectedLink?.first?.headers?.toString() ?: "none"
-        val referer = currentSelectedLink?.first?.referer ?: "none"
-        Log.e(
-            TAG,
-            "playerError: $currentSelectedLink, " +
-                    "type=${exception::class.qualifiedName}, " +
-                    "message=${exception.message}, url=$currentUrl, headers=$headers, " +
-                    "referer=$referer, position=${player.getPosition() ?: "unknown"}, " +
-                    "duration=${player.getDuration() ?: "unknown"}, " +
-                    "isPlaying=${player.getIsPlaying()}", exception
-        )
+        Log.w(TAG, "Playback error ${(exception as? androidx.media3.common.PlaybackException)?.errorCodeName ?: exception.javaClass.simpleName}")
 
         if (isLitePlayback() && !hasNextMirror() && viewModel.state.loading is Resource.Loading) {
             liteAwaitingRecovery = true
