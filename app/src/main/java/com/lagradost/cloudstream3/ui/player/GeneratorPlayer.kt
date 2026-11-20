@@ -111,6 +111,7 @@ import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+import com.lagradost.cloudstream3.ui.settings.SettingsFragmentScreen.launchSafe
 import com.lagradost.cloudstream3.ui.subtitles.SUBTITLE_AUTO_SELECT_KEY
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.getAutoSelectLanguageTagIETF
@@ -1020,23 +1021,19 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     private fun openSubPicker() {
-        try {
-            subsPathPicker.launch(
-                arrayOf(
-                    "text/plain",
-                    "text/str",
-                    "application/octet-stream",
-                    MimeTypes.TEXT_UNKNOWN,
-                    MimeTypes.TEXT_VTT,
-                    MimeTypes.TEXT_SSA,
-                    MimeTypes.APPLICATION_TTML,
-                    MimeTypes.APPLICATION_MP4VTT,
-                    MimeTypes.APPLICATION_SUBRIP,
-                )
+        subsPathPicker.launchSafe(
+            arrayOf(
+                "text/plain",
+                "text/str",
+                "application/octet-stream",
+                MimeTypes.TEXT_UNKNOWN,
+                MimeTypes.TEXT_VTT,
+                MimeTypes.TEXT_SSA,
+                MimeTypes.APPLICATION_TTML,
+                MimeTypes.APPLICATION_MP4VTT,
+                MimeTypes.APPLICATION_SUBRIP,
             )
-        } catch (e: Exception) {
-            logError(e)
-        }
+        )
     }
 
     @MainThread
@@ -1302,7 +1299,8 @@ class GeneratorPlayer : FullScreenPlayer() {
                     // Always display current linkFooter
                     val sortedLinks = if (isLitePlayback()) orderedPlaybackLinks() else viewModel.state.sortLinks(qualityProfile)
 
-                    filteredLinks = sortedLinks.filter { it.shouldUseLink || it.link == currentLinkUsed }
+                    filteredLinks =
+                        sortedLinks.filter { it.shouldUseLink || it.link == currentLinkUsed }
 
                     searchingFooter?.isVisible = viewModel.state.loading is Resource.Loading
                     sourceDialog.findViewById<LinearLayout>(R.id.sort_sources_holder)?.isGone =
@@ -2518,7 +2516,8 @@ class GeneratorPlayer : FullScreenPlayer() {
 
             // Set up TV clock visibility
             if (isLayout(TV)) {
-                val showTvClock = settingsManager.getBoolean(ctx.getString(R.string.tv_layout_clock_key), false)
+                val showTvClock =
+                    settingsManager.getBoolean(ctx.getString(R.string.tv_layout_clock_key), false)
                 playerBinding?.playerVideoClock?.isVisible = showTvClock
             } else {
                 playerBinding?.playerVideoClock?.isVisible = false

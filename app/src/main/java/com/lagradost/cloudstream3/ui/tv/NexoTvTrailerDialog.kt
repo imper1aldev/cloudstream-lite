@@ -10,10 +10,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.annotation.OptIn
 import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.NexoTvTrailerBinding
 import com.lagradost.cloudstream3.ui.player.*
@@ -28,6 +30,7 @@ internal fun List<ExtractedTrailerData>.tvTrailerLinks(): List<ExtractorLink> =
     }.sortedByDescending { it.quality }
 
 /** A manual trailer session, isolated from episode actions, progress and progressive-server policy. */
+@OptIn(UnstableApi::class)
 class NexoTvTrailerDialog : DialogFragment() {
     private var binding: NexoTvTrailerBinding? = null
     private var engine: CS3IPlayer? = null

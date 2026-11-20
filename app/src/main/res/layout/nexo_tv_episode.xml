@@ -1,4 +1,5 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="224dp" android:layout_height="wrap_content" android:layout_marginEnd="12dp"
     android:orientation="vertical" android:background="@drawable/nexo_tv_card_background"
     android:padding="6dp" android:focusable="true" android:clickable="true">
@@ -10,10 +11,10 @@
             android:layout_margin="6dp" android:paddingStart="6dp" android:paddingEnd="6dp"
             android:paddingTop="3dp" android:paddingBottom="3dp"
             android:background="@drawable/nexo_tv_resume_background" android:textSize="12sp" android:textColor="#FFFFFF" />
-        <ImageView android:id="@+id/nexo_tv_episode_watched"
+        <androidx.appcompat.widget.AppCompatImageView android:id="@+id/nexo_tv_episode_watched"
             android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="top|end"
             android:layout_margin="6dp" android:background="@drawable/nexo_tv_resume_background"
-            android:src="@drawable/ic_baseline_check_24" android:tint="#FFFFFF"
+            android:src="@drawable/ic_baseline_check_24" app:tint="#FFFFFF"
             android:contentDescription="@string/type_completed" android:visibility="gone" />
         <ProgressBar android:id="@+id/nexo_tv_episode_progress" style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent" android:layout_height="3dp" android:layout_gravity="bottom"

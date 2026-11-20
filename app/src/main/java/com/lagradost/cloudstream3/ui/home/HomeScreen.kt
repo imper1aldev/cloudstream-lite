@@ -165,6 +165,8 @@ object HomeScreen : Screen {
             )
         }.ifEmpty { listOfNotNull(heroUi) }
 
+        val detailsLabel = stringResource(R.string.lite_hero_details)
+        val deleteLabel = stringResource(R.string.delete)
         HomeContent(
             page = when (providerReady) {
                 null -> Resource.Loading()
@@ -177,7 +179,7 @@ object HomeScreen : Screen {
             onSectionClick = { section = it },
             onResumeLongClick = { card ->
                 AlertDialog.Builder(context).setTitle(card.name)
-                    .setItems(arrayOf(context.getString(R.string.lite_hero_details), context.getString(R.string.delete))) { _, index ->
+                    .setItems(arrayOf(detailsLabel, deleteLabel)) { _, index ->
                         if (index == 0) loadResult(card.url, card.apiName, card.name)
                         else (card as? DataStoreHelper.ResumeWatchingResult)?.let {
                             DataStoreHelper.removeLastWatched(it.parentId)

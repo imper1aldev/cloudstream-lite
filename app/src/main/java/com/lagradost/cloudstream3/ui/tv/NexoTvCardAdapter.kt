@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.tv
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,6 +26,8 @@ class NexoTvCardAdapter @JvmOverloads constructor(
     private val immersive: Boolean = false,
 ) : ListAdapter<SearchResponse, NexoTvCardAdapter.Card>(object : DiffUtil.ItemCallback<SearchResponse>() {
     override fun areItemsTheSame(old: SearchResponse, new: SearchResponse) = old.apiName == new.apiName && old.url == new.url
+    // Map.equals compares entries, including when providers use different map implementations.
+    @SuppressLint("DiffUtilEquals")
     override fun areContentsTheSame(old: SearchResponse, new: SearchResponse) =
         old.name == new.name && old.posterUrl == new.posterUrl && old.posterHeaders == new.posterHeaders && watchProgress(old) == watchProgress(new)
 }) {

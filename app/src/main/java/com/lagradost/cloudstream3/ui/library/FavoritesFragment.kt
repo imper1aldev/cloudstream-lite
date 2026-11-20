@@ -121,12 +121,13 @@ class FavoritesFragment : BaseComposeFragment() {
         }
         selected?.let { favorite ->
             ModalBottomSheet(onDismissRequest = { selected = null }, containerColor = LiteColors.background) {
+                val removedMessage = stringResource(R.string.favorite_removed, favorite.name)
                 Text(favorite.name, style = LiteType.rowTitle, modifier = Modifier.padding(LiteSpacing.screenPadding))
                 TextButton(onClick = { selected = null; loadResult(favorite.url, favorite.apiName, favorite.name) }) { Text(stringResource(R.string.lite_hero_details)) }
                 TextButton(onClick = {
                     DataStoreHelper.removeFavoritesData(favorite.id)
                     selected = null
-                    Snackbar.make(view, context.getString(R.string.favorite_removed).format(favorite.name), 10_000)
+                    Snackbar.make(view, removedMessage, 10_000)
                         .setAction(R.string.lite_undo) { DataStoreHelper.setFavoritesData(favorite.id, favorite) }.show()
                 }) { Text(stringResource(R.string.action_remove_from_favorites)) }
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
